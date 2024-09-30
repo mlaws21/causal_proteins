@@ -1,0 +1,10 @@
+*.fasta
+*.fna
+*.cif
+*.pdb
+*.json
+*.DS_Store
+.DS_Store
+*.txt
+*.gb
+*.zip
