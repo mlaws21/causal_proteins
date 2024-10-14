@@ -68,7 +68,7 @@ def calculate_distances(coords1, coords2):
     distances = np.linalg.norm(coords1 - coords2, axis=1)
     return distances
 
-def compare_structures(cif_file1, cif_file2, json_file1, json_file2, thresh=80.0, verbose=True):
+def compare_structures(cif_file1, cif_file2, json_file1, json_file2, thresh=70.0, verbose=True):
     """Compares two structures by calculating distances and extracting pLDDT scores."""
     residues2cords1, residues2plddt1 = extract_plddt_and_coords(cif_file1, json_file1)
     residues2cords2, residues2plddt2 = extract_plddt_and_coords(cif_file2, json_file2)
@@ -139,7 +139,7 @@ def main():
     cif_file2 = f'{folder2}/{folder2}_model_0.cif'
     json_file1 = f'{folder1}/{folder1}_full_data_0.json'  # Replace with your first JSON file
     json_file2 = f'{folder2}/{folder2}_full_data_0.json'
-    compare_structures(cif_file1, cif_file2, json_file1, json_file2, verbose=False)
+    compare_structures(cif_file1, cif_file2, json_file1, json_file2, verbose=False, thresh=70.0)
 
 if __name__ == "__main__":
     main()
