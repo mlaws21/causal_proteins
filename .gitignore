@@ -10,3 +10,5 @@
 *.zip
 *.csv
 *.tsv
+*.err
+*.out
