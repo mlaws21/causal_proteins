@@ -72,6 +72,8 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
     # conf_dists = []
     P, Q = [], []
     # print(len(coords1), len(coords2), len(plddt1), len(plddt2))
+    ctr = 0
+    
     for residue_id in residues2cords1.keys():
         if residue_id in residues2cords2:
             # print(residue_id)
@@ -85,11 +87,16 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
             # print("atom coords", atom_coords1, atom_coords2)
             # Check if both residues have the same number of atoms
             if len(residue_coords1) == len(residue_coords2):
-                
                 for c1, c2, p1, p2 in zip(residue_coords1, residue_coords2, residue_plddt1, residue_plddt2):
+                    # print(ctr, (p1 + p2) / 2)
                     if (p1 + p2) / 2 > thresh:
                         P.append(c1)
                         Q.append(c2)
+                    # else:
+                    #     # hmm, is this okay?
+                    #     P.append([0,0,0])
+                    #     Q.append([0,0,0])
+                        
                         
                 # if residue_plddt1[residue_id] > thresh
                 # distances = calculate_distances(residue_coords1, residue_coords2)
@@ -97,6 +104,9 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
                 
             else:
                 print(f"Warning: Residue {residue_id} has different numbers of atoms between the two structures.")
+
+            ctr += 1
+            
         else:
             print("Error: we shouldnt be here")
             
