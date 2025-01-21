@@ -38,7 +38,7 @@ def check_job(job_id):
 
 def fold(name, seq, partition):
     
-    name = name.replace(":", "_").replace(">", "_")
+    name = name.replace(":", "_").replace(">", "_").lower()
     if os.path.exists(f"/shared/25mdl4/af_output/{name}"):
         print(f"SKIPPING: [{name}] has already been folded")
         return True
@@ -105,7 +105,7 @@ def fold_all(data_file, partition):
 # Create a ThreadPoolExecutor with 4 threads
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
-        for index, row in df.tail(100).iterrows():
+        for index, row in df[::-1].iterrows():
             executor.submit(fold, row["ID"], row["Sequence"], partition)
     # tasks = [executor.submit(worker_function, i) for i in range(10)]
 
