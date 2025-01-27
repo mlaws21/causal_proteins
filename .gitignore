@@ -12,3 +12,5 @@
 *.tsv
 *.err
 *.out
+*.pkl
+*.png
