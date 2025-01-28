@@ -9,14 +9,23 @@ import pickle
 from scipy.optimize import linprog
 import cvxpy as cp
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from scipy.stats import norm
 
+def fa(data, treatment="T"):
+    
+    formula = f'{treatment} ~ 1'
+    
+    model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
+    result = model.fit()
+    return result 
+    
 
 def mu(data, treatment="T", outcome="Y"):
     # Ep[Y | A = a, W = w]
     
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounder_form = "+".join(confounders)
-    formula = f'{outcome} ~ {treatment} + {confounder_form}'
+    formula = f'{outcome} ~ 1 + {treatment} + {confounder_form}'
     
     # print(formula)
     model = smf.glm(formula=formula, data=data, family=sm.families.Binomial())
@@ -30,7 +39,7 @@ def g(data, treatment="T", outcome="Y"):
     
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounder_form = "+".join(confounders)
-    formula = f'{treatment} ~ {confounder_form}'
+    formula = f'{treatment} ~ 1 + {confounder_form}'
     
     # print(formula)
     # gaussian bc continuous
@@ -40,68 +49,35 @@ def g(data, treatment="T", outcome="Y"):
     
 #def fa(data, treatment="T")
 
-def gamma(a, data, mu_est, g_est, treatment="T", outcome="Y"):
+def gamma(a, data, ij_data, mu_est, g_est, fa_est, treatment="T", outcome="Y"):
     
-    n = len(data)
     
-    confounders = [col for col in data.columns if col not in [treatment, outcome]]
-    confounders_treatment = [treatment] + confounders 
+
+    Y = data[outcome]
     
-    # g_est = g(data, treatment, outcome)
-    # mu_est = mu(data, treatment, outcome)
+    mu_pred = mu_est.predict(data)
+    g_pred = g_est.predict(data)
+    fa_pred = fa_est.predict(data)
+    
+    std = np.std(data[treatment] - fa_pred)
+    prob_a = norm.pdf(data[treatment], loc=fa_pred, scale=std)
+    
+    ind = data[treatment] <= a
+    
+    front = np.mean(ind * (Y- mu_pred)/(g_pred/prob_a))
+
 
     
-    # front = sum([(row[outcome] - mu_est.predict(row[confounders_treatment]))/g_est.predict(row[confounders]) for _, row in data.iterrows() if row[treatment] <= a])/n
+    indij = ij_data[treatment] <= a
+    mu_predij = mu_est.predict(ij_data)
     
-    # for _, row in data.iterrows():
-    #     if row[treatment] <= a:
-            
-    #         # print(row[confounders_treatment][0])
-    #         # print(row[confounders_treatment])
-    #         mu_pred = mu_est.predict(row[confounders_treatment])
-    #         #TODO figure out what is fp(a)
-    #         g_pred = g_est.predict(row[confounders]) / F(a, data, treatment=treatment)
-            
-    #         # print(mu_pred.values[0], g_pred.values[0])
-            
-    #         front += (row[outcome] - mu_pred.values[0]) / g_pred.values[0]
-            
-    #         # print(mu_pred + g_pred)
-            
     
-    # print(front)
-    front = 0
-    back = 0
-    for _, rowi in data.iterrows():
-        
-        if rowi[treatment] <= a:
-            
-            
-            mu_pred = mu_est.predict(rowi[confounders_treatment])
-            #TODO figure out what is fp(a)
-            g_pred = g_est.predict(rowi[confounders]) #/ F(a, data, treatment=treatment)
     
-            
-            front += (rowi[outcome] - mu_pred.values[0]) / g_pred.values[0]
-            
-            for _, rowj in data.iterrows():
-                
-                new_data = rowj[confounders_treatment]
-                new_data[treatment] = rowi[treatment]
+    back = np.mean(indij * mu_predij)
+    
+  
+    total = front + back
 
-                # print(mu_est.predict(new_data))
-                predicted_values = mu_est.predict(new_data).values[0]
-                back += predicted_values
-                
-    # print(back)
-    # back /= (n*n)
-    # print(back)
-    
-    total = (front / n) + (back / (n*n))
-    # print(front + back)
-
-    
-    # print(type(front))
     
     return total
     
@@ -127,31 +103,26 @@ def F(a, data, treatment="T"):
 def get_points(data, treatment="T", outcome="Y"):
     xs = [0]
     ys = [0]
-    
-    
-    # with ThreadPoolExecutor(max_workers=64) as executor:
-    #     # Submit tasks for each row
-    #     futures = [
-    #         executor.submit(process_row, row, data, treatment, outcome)
-    #         for _, row in data.iterrows()
-    #     ]
 
-    #     # As each future completes, unpack the results
-    #     for future in as_completed(futures):
-    #         x, y = future.result()
-    #         xs.append(x)
-    #         ys.append(y)
 
-    # return xs, ys
-    
-
+    fa_est = fa(data, treatment)
     g_est = g(data, treatment, outcome)
     mu_est = mu(data, treatment, outcome)
-
     
+    ij_df = pd.DataFrame(columns=data.columns)
+    for _, rowi in data.iterrows():
+        
+            for _, rowj in data.iterrows():
+                
+                
+                cp = rowj.copy()
+                cp[treatment] = rowi[treatment]
+                ij_df = pd.concat([ij_df, pd.DataFrame([cp])], ignore_index=True)
+
+    # TODO: can enforce uniqueness if needed
     for _, row in data.iterrows():
         xs.append(F(row[treatment], data, treatment))
-        ys.append(gamma(row[treatment], data, mu_est, g_est, treatment, outcome))
+        ys.append(gamma(row[treatment], data, ij_df, mu_est, g_est, fa_est, treatment, outcome))
         
     
     # xs = np.array(xs)
@@ -278,7 +249,7 @@ def theta(a, gcm_x, gcm_y, data, treatment="T"):
     Fa = F(a, data, treatment=treatment)
     
     # print(a)
-    # print(Fa)
+    print(Fa)
     ind = np.where(gcm_x == Fa)[0][0]
     
     slope_left = (gcm_y[ind] - gcm_y[ind - 1]) / (gcm_x[ind] - gcm_x[ind - 1])
@@ -357,9 +328,20 @@ def build_cubic_spline(x_data, f_data):
         # return cs(x, nu=1)
 
     return spline_function, spline_derivative
-  
+
+def backdoor(a, data, treatment="T", outcome="Y"):
+    
+    
+    confounders = [col for col in data.columns if col not in [outcome]]
+    
+    formula = f"{outcome} ~ {" + ".join(confounders)}"
+    model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
+    data_a = data.copy()
+    data_a[treatment] = a
+    return np.mean(model.predict(data_a))
+    
 def main():
-    data = pd.read_csv("synthetic_data1.csv").head(20)
+    data = pd.read_csv("synthetic_data.csv").head(200)
 
     xlist, ylist = get_points(data)
     
@@ -390,7 +372,7 @@ def main():
         
     assert is_convex(gcm_x, gcm_y)
     
-    # this number is the averate 
+    # # this number is the averate 
     
     # for i in np.arange(0, 1, 0.1):
     fx, f1_x = build_cubic_spline(gcm_x, gcm_y)
@@ -405,22 +387,31 @@ def main():
         Fi = F(i, data, treatment="T")
         print(f"Causal Effect (spline) {i:.2f}: {f1_x(Fi):.3f}")
     
-        # print(f"Causal Effect {i:.2f}: {causal_effect:.3f}")
-        print(f"Causal Effect {i:.2f}: {compute_mean_outcome(i):.3f}")
+        print(f"Causal Effect {i:.2f}: {causal_effect:.3f}")
+        # print(f"Causal Effect {i:.2f}: {compute_mean_outcome(i):.3f}")
         
 
     
     
     plt.plot(range(-20, 20), [f1_x(F(i, data, treatment="T")) for i in range(-20, 20)] , color='red', label="Estimate", marker='x')
-    plt.plot(range(-20, 20), [compute_mean_outcome(i) for i in range(-20, 20)], color='red', label="Ground", marker='o')
-        
-        
-        
+    # plt.plot(range(-20, 20), [theta(i, gcm_x, gcm_y, data) for i in range(-20, 20)] , color='red', label="Estimate", marker='x')
     
-    # plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
-    # plt.plot(np.arange(0, 1.0001, 0.001), [fx(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
     
-    # plt.scatter(xlist, ylist, color='blue', label='Points')
+    plt.plot(range(-20, 20), [compute_mean_outcome(i) for i in range(-20, 20)], color='blue', label="Ground", marker='o')
+    plt.plot(range(-20, 20), [backdoor(i, data) for i in range(-20, 20)], color='green', label="Backdoor", marker='+')
+    
+        
+    plt.grid(True)
+    plt.legend()
+    plt.savefig("scatter_plot.png", format="png", dpi=300)
+    
+     
+    plt.clf()
+    
+    plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
+    plt.plot(np.arange(0, 1.0001, 0.001), [fx(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
+    
+    plt.scatter(xlist, ylist, color='blue', label='Points')
 
     # Add labels and title
     plt.xlabel("X-axis")
