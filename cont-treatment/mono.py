@@ -8,6 +8,7 @@ from tqdm import tqdm
 import pickle
 from scipy.optimize import linprog
 import cvxpy as cp
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def mu(data, treatment="T", outcome="Y"):
@@ -35,44 +36,54 @@ def g(data, treatment="T", outcome="Y"):
     # gaussian bc continuous
     model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
     result = model.fit()
-    return result
+    return result 
     
-    
-def gamma(a, data, treatment="T", outcome="Y"):
+#def fa(data, treatment="T")
+
+def gamma(a, data, mu_est, g_est, treatment="T", outcome="Y"):
     
     n = len(data)
     
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounders_treatment = [treatment] + confounders 
     
+    # g_est = g(data, treatment, outcome)
+    # mu_est = mu(data, treatment, outcome)
 
-    g_est = g(data, treatment, outcome)
-    mu_est = mu(data, treatment, outcome)
     
     # front = sum([(row[outcome] - mu_est.predict(row[confounders_treatment]))/g_est.predict(row[confounders]) for _, row in data.iterrows() if row[treatment] <= a])/n
     
-    front = 0
-    for _, row in data.iterrows():
-        if row[treatment] <= a:
+    # for _, row in data.iterrows():
+    #     if row[treatment] <= a:
             
-            # print(row[confounders_treatment][0])
-            # print(row[confounders_treatment])
-            mu_pred = mu_est.predict(row[confounders_treatment])
-            g_pred = g_est.predict(row[confounders])
+    #         # print(row[confounders_treatment][0])
+    #         # print(row[confounders_treatment])
+    #         mu_pred = mu_est.predict(row[confounders_treatment])
+    #         #TODO figure out what is fp(a)
+    #         g_pred = g_est.predict(row[confounders]) / F(a, data, treatment=treatment)
             
-            # print(mu_pred.values[0], g_pred.values[0])
+    #         # print(mu_pred.values[0], g_pred.values[0])
             
-            front += (row[outcome] - mu_pred.values[0]) / g_pred.values[0]
+    #         front += (row[outcome] - mu_pred.values[0]) / g_pred.values[0]
             
-            # print(mu_pred + g_pred)
+    #         # print(mu_pred + g_pred)
             
-    front /= n
     
     # print(front)
-    
+    front = 0
     back = 0
     for _, rowi in data.iterrows():
+        
         if rowi[treatment] <= a:
+            
+            
+            mu_pred = mu_est.predict(rowi[confounders_treatment])
+            #TODO figure out what is fp(a)
+            g_pred = g_est.predict(rowi[confounders]) #/ F(a, data, treatment=treatment)
+    
+            
+            front += (rowi[outcome] - mu_pred.values[0]) / g_pred.values[0]
+            
             for _, rowj in data.iterrows():
                 
                 new_data = rowj[confounders_treatment]
@@ -83,15 +94,16 @@ def gamma(a, data, treatment="T", outcome="Y"):
                 back += predicted_values
                 
     # print(back)
-    back /= (n*n)
+    # back /= (n*n)
     # print(back)
     
+    total = (front / n) + (back / (n*n))
     # print(front + back)
 
     
     # print(type(front))
     
-    return front + back
+    return total
     
 def F(a, data, treatment="T"):
     # emperical distribution function
@@ -103,15 +115,48 @@ def F(a, data, treatment="T"):
     # print(a)
     edf = np.sum(series <= a) / n
     return edf
-    
+  
+
+# def process_row(row, data, treatment, outcome):
+  
+#     val = row[treatment]
+#     x = F(val, data, treatment)
+#     y = gamma(val, data, treatment, outcome)
+#     return x, y
+  
 def get_points(data, treatment="T", outcome="Y"):
     xs = [0]
     ys = [0]
     
+    
+    # with ThreadPoolExecutor(max_workers=64) as executor:
+    #     # Submit tasks for each row
+    #     futures = [
+    #         executor.submit(process_row, row, data, treatment, outcome)
+    #         for _, row in data.iterrows()
+    #     ]
+
+    #     # As each future completes, unpack the results
+    #     for future in as_completed(futures):
+    #         x, y = future.result()
+    #         xs.append(x)
+    #         ys.append(y)
+
+    # return xs, ys
+    
+
+    g_est = g(data, treatment, outcome)
+    mu_est = mu(data, treatment, outcome)
+
+    
     for _, row in data.iterrows():
         xs.append(F(row[treatment], data, treatment))
-        ys.append(gamma(row[treatment], data, treatment, outcome))
+        ys.append(gamma(row[treatment], data, mu_est, g_est, treatment, outcome))
         
+    
+    # xs = np.array(xs)
+    
+    
     
     return xs, ys
     
@@ -233,24 +278,97 @@ def theta(a, gcm_x, gcm_y, data, treatment="T"):
     Fa = F(a, data, treatment=treatment)
     
     # print(a)
-    print(Fa)
+    # print(Fa)
     ind = np.where(gcm_x == Fa)[0][0]
     
     slope_left = (gcm_y[ind] - gcm_y[ind - 1]) / (gcm_x[ind] - gcm_x[ind - 1])
     return slope_left
     # print(Fa)
+
+
+def compute_mean_outcome(treatment_value, treatment="T", outcome="Y"):
+    df1 = pd.read_csv("synthetic_data.csv")
+    df2 = pd.read_csv("synthetic_data_addition.csv")
+    # data = df1
     
+    data = pd.concat([df1, df2], ignore_index=True)
+    
+    data[treatment] = treatment_value
+    
+    b0, b1, b2, b3, b4 = -1, 0.1, -0.5, 0.3, 0.8  # Coefficients
+    
+    logit = (
+        b0
+        + b1 * data["X1"]
+        + b2 * data["X2"]
+        + b3 * data["X3"]
+        + b4 * data[treatment]
+    )
+    
+    prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
+    
+    data[outcome] = np.random.binomial(1, prob_Y)
+    
+    return data[outcome].mean()
+
+from scipy.interpolate import CubicSpline
+def build_cubic_spline(x_data, f_data):
+    """
+    Build a cubic spline interpolant for the given data points (x_data, f_data).
+
+    Parameters
+    ----------
+    x_data : array_like
+        1D array of x-coordinates, assumed to be strictly increasing.
+    f_data : array_like
+        1D array of function values at each x_data point.
+
+    Returns
+    -------
+    spline_function : callable
+        A function that, given a scalar x, returns the interpolated f(x).
+    spline_derivative : callable
+        A function that, given a scalar x, returns the derivative f'(x).
+    """
+    # Convert inputs to numpy arrays (good practice, not always required)
+    x_data = np.asarray(x_data, dtype=float)
+    f_data = np.asarray(f_data, dtype=float)
+
+    # Build the cubic spline object
+    cs = CubicSpline(x_data, f_data)
+
+    # Define a function to evaluate the spline at a given x
+    def spline_function(x):
+        """
+        Evaluate the cubic spline interpolation at x.
+        """
+        return cs(x)
+
+    # Define a function to evaluate the derivative of the spline at a given x
+    def spline_derivative(x):
+        """
+        Evaluate the first derivative of the cubic spline interpolation at x.
+        """
+        # Option 1: Use cs.derivative()(x)
+        return cs.derivative()(x)
+        
+        # Option 2: Alternatively, CubicSpline supports calling cs(x, nu=1)
+        # which returns the first derivative:
+        # return cs(x, nu=1)
+
+    return spline_function, spline_derivative
+  
 def main():
-    data = pd.read_csv("synthetic_data1.csv")
+    data = pd.read_csv("synthetic_data1.csv").head(20)
 
     xlist, ylist = get_points(data)
     
 
-    with open("xs.pkl", "wb") as file:
-        pickle.dump(xlist, file)
+    # with open("xs.pkl", "wb") as file:
+    #     pickle.dump(xlist, file)
         
-    with open("ys.pkl", "wb") as file:
-        pickle.dump(ylist, file)
+    # with open("ys.pkl", "wb") as file:
+    #     pickle.dump(ylist, file)
         
     # with open("xs.pkl", "rb") as file:
     #     xlist = pickle.load(file)
@@ -275,14 +393,34 @@ def main():
     # this number is the averate 
     
     # for i in np.arange(0, 1, 0.1):
+    fx, f1_x = build_cubic_spline(gcm_x, gcm_y)
+    
+    
+    
     for i in range(-20, 20):
     
         causal_effect = theta(i, gcm_x, gcm_y, data)
+        
+        
+        Fi = F(i, data, treatment="T")
+        print(f"Causal Effect (spline) {i:.2f}: {f1_x(Fi):.3f}")
     
-        print(f"Causal Effect {i:.2f}: {causal_effect:.3f}")
+        # print(f"Causal Effect {i:.2f}: {causal_effect:.3f}")
+        print(f"Causal Effect {i:.2f}: {compute_mean_outcome(i):.3f}")
+        
+
     
-    plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
-    plt.scatter(xlist, ylist, color='blue', label='Points')
+    
+    plt.plot(range(-20, 20), [f1_x(F(i, data, treatment="T")) for i in range(-20, 20)] , color='red', label="Estimate", marker='x')
+    plt.plot(range(-20, 20), [compute_mean_outcome(i) for i in range(-20, 20)], color='red', label="Ground", marker='o')
+        
+        
+        
+    
+    # plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
+    # plt.plot(np.arange(0, 1.0001, 0.001), [fx(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
+    
+    # plt.scatter(xlist, ylist, color='blue', label='Points')
 
     # Add labels and title
     plt.xlabel("X-axis")
@@ -292,7 +430,7 @@ def main():
     # Add grid and legend
     plt.grid(True)
     plt.legend()
-    plt.savefig("scatter_plot.png", format="png", dpi=300)
+    plt.savefig("scatter_plot1.png", format="png", dpi=300)
 
     # Show the plot
 
