@@ -12,12 +12,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.stats import norm
 from scipy.interpolate import CubicSpline, PchipInterpolator
 from pygam import LinearGAM, s
+import sys
 
 
 def fa(data, treatment="T"):
     
     formula = f'{treatment} ~ 1'
-    print(formula)
+    print("Distribution of A Formula:", formula)
     
     model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
     result = model.fit()
@@ -30,7 +31,7 @@ def mu(data, treatment="T", outcome="Y"):
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounder_form = "+".join(confounders)
     formula = f'{outcome} ~ 1 + {treatment} + {confounder_form}'
-    print(formula)
+    print("Mu Formula:", formula)
     
     # print(formula)
     model = smf.glm(formula=formula, data=data, family=sm.families.Binomial())
@@ -44,7 +45,7 @@ def pi(data, treatment="T", outcome="Y"):
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounder_form = "+".join(confounders)
     formula = f'{treatment} ~ 1 + {confounder_form}'
-    print(formula)
+    print("Pi Formula:", formula)
 
     # gaussian bc continuous
     model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
@@ -214,7 +215,7 @@ def compute_ground(data, treatment_value, treatment="T", outcome="Y"):
     #     + b4 * data[treatment]
     # )
     
-    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -1, 0.5, 0.1, 0.3, 0.8  # Coefficients
+    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.3
     
     logit = (
         intercept
@@ -246,11 +247,13 @@ def backdoor(a, data, treatment="T", outcome="Y"):
     
     formula = f"{outcome} ~ 1 + {" + ".join(confounders)}"
     
-    print(formula)
+    print("backdoor formula", formula)
     model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
     data_a = data.copy()
     data_a[treatment] = a
-    return np.mean(model.predict(data_a))
+    data_0 = data.copy()
+    data_0[treatment] = 0
+    return np.mean(model.predict(data_a)) - np.mean(model.predict(data_0))
     
 def verify(xs, ys, gcm_x, gcm_y):
     # verifies the GCM -- true if verifies
@@ -266,10 +269,31 @@ def verify(xs, ys, gcm_x, gcm_y):
     
     return is_convex(gcm_x, gcm_y)
 
+def verify_spline_convex(spline, data, treatment):
+    
+    myrange = np.linspace(data[treatment].min(), data[treatment].max(), 100)
+    snd_derivs = np.array([spline(F(i, data, treatment=treatment), 2) for i in myrange])
+    
+    assert(np.all(snd_derivs >= 0))
+    # print(snd_derivs)
+    
+
+    # plt.savefig(f"dose_response{str(count)}.png", format="png", dpi=300)
+    
+    plt.clf()
+
+#TODO Make sure the spline is convex -- but pretty close
 
 def main():
+    
+    if len(sys.argv) < 2:
+        print("Usage: python mono.py [count]")
+        exit(-1)
+    count = int(sys.argv[1])
+    
+    print("COUNT:", count)
     # data = pd.read_csv("synthetic_data.csv").head(100)
-    data = pd.read_csv("small_dropped.csv")
+    data = pd.read_csv("final_clean.csv").head(count)
     # data = pd.read_csv("cleaned_data.csv").head(200)
     
     
@@ -280,7 +304,10 @@ def main():
 
     gcm_x, gcm_y = non_smooth_gcm(xlist, ylist)
     
-    cubic_spline = build_cubic_spline(gcm_x, gcm_y)
+    # cubic_spline = build_cubic_spline(gcm_x, gcm_y)
+    cubic_spline = build_cubic_spline(xlist, ylist)
+    
+    verify_spline_convex(cubic_spline, data, treatment)
     
     # NOTE: this is an idea
     # gam = LinearGAM(s(0, constraints="convex")).fit(gcm_x, gcm_y)
@@ -288,38 +315,46 @@ def main():
     
     assert verify(xlist, ylist, gcm_x, gcm_y)
     
-
+    print(verify(xlist, ylist, xlist, ylist))
+    
+    
+    
     # NOTE: not using spline doesn't work because weird edge behaivor
-    # plt.plot(range(-20, 20), [theta(i, gcm_x, gcm_y, data, treatment="T")for i in range(-20, 20)] , color='red', label="Estimate", marker='x')
+    # plt.plot(np.arange(0, 15.5, 0.5), [theta(i, gcm_x, gcm_y, data, treatment="Align_Score")for i in np.arange(0, 15.5, 0.5)] , color='red', label="Estimate", marker='x')
+    # plt.plot(np.arange(0, 15.5, 0.5), [theta(i, xlist, ylist, data, treatment="Align_Score")for i in np.arange(0, 15.5, 0.5)] , color='red', label="Estimate", marker='x')
+    
     
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
     plt.plot(np.arange(0, 15.5, 0.5), [cubic_spline(F(i, data, treatment=treatment), 1) for i in np.arange(0, 15.5, 0.5)] , color='red', label="Estimate", marker='x')
     plt.plot(np.arange(0, 15.5, 0.5), [compute_ground(data, i, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='blue', label="Ground", marker='o')
-    plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
+    # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
+    plt.xlabel("Alignment Score (Å)")
+    plt.ylabel("Probability of Cancer")
+    plt.title("Dose Response Curve")
         
     plt.grid(True)
     plt.legend()
-    plt.savefig("scatter_plot.png", format="png", dpi=300)
+    plt.savefig(f"dose_response{str(count)}.png", format="png", dpi=300)
     
      
     plt.clf()
     
     # plt.plot(X_grid, deriv_1, color='green', label='Spline')
     
-    plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
-    # plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
+    # plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
+    plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
     plt.scatter(xlist, ylist, color='blue', label='Points')
 
     # Add labels and title
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
+    plt.xlabel("F(Align Score)") # where F is the continous emperical distribution
+    plt.ylabel("Gamma") # that crazy formula
     plt.title("Global Convex Minorant (GCM)")
 
     # Add grid and legend
     plt.grid(True)
     plt.legend()
-    plt.savefig("scatter_plot1.png", format="png", dpi=300)
+    plt.savefig(f"gcm{str(count)}.png", format="png", dpi=300)
 
 
 if __name__ == "__main__":
