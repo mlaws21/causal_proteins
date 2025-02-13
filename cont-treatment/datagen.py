@@ -14,6 +14,7 @@ X3 = np.random.binomial(1, 0.7, n)  # Binary with P(X3=1) = 0.7
 
 # Generate a continuous treatment (T) as a function of the covariates (optional)
 T = 5 * X1 + 3 * X2 - 2 * X3 + np.random.normal(0, 1, n)
+#align + noise
 
 # Generate the binary outcome (Y) using a logistic model
 # Logistic regression formula: P(Y=1) = sigmoid(b0 + b1*X1 + b2*X2 + b3*X3 + b4*T)

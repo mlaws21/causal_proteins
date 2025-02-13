@@ -95,17 +95,17 @@ def fold(name, seq, partition):
 
 
 def fold_all(data_file, partition):
-    df = pd.read_csv("data.csv")
+    df = pd.read_csv("nice_data.csv")
     
     
     # Example function to be executed by threads
 
     
-    num_workers = 4 if partition == "a" else 8
+    num_workers = 4 if partition == "a" else 6
 # Create a ThreadPoolExecutor with 4 threads
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
-        for index, row in df[::-1].iterrows():
+        for index, row in df.iterrows():
             executor.submit(fold, row["ID"], row["Sequence"], partition)
     # tasks = [executor.submit(worker_function, i) for i in range(10)]
 

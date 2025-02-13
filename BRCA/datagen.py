@@ -51,11 +51,11 @@ def generate_data(mutation_path, num_datapoints=1000):
         sample = to_sample.sample(n=1)
         seq = sample["seq"].iloc[0]
         
-        id = sample["Genomic_Coordinate_hg38"].iloc[0]
+        idx = sample["Genomic_Coordinate_hg38"].iloc[0]
             
 
         row = {
-                "ID": id,
+                "ID": idx,
                 "Old": age,
                 "White": race,
                 "Unhealthy": lifestyle,

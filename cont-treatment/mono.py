@@ -17,6 +17,7 @@ from pygam import LinearGAM, s
 def fa(data, treatment="T"):
     
     formula = f'{treatment} ~ 1'
+    print(formula)
     
     model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
     result = model.fit()
@@ -29,6 +30,7 @@ def mu(data, treatment="T", outcome="Y"):
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounder_form = "+".join(confounders)
     formula = f'{outcome} ~ 1 + {treatment} + {confounder_form}'
+    print(formula)
     
     # print(formula)
     model = smf.glm(formula=formula, data=data, family=sm.families.Binomial())
@@ -42,6 +44,7 @@ def pi(data, treatment="T", outcome="Y"):
     confounders = [col for col in data.columns if col not in [treatment, outcome]]
     confounder_form = "+".join(confounders)
     formula = f'{treatment} ~ 1 + {confounder_form}'
+    print(formula)
 
     # gaussian bc continuous
     model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
@@ -119,9 +122,13 @@ def get_points(data, treatment="T", outcome="Y"):
                 ij_df = pd.concat([ij_df, pd.DataFrame([cp])], ignore_index=True)
 
     # NOTE: can enforce uniqueness if needed -- but shouldnt need to bc continuous
+    
+    seen = set()
     for _, row in data.iterrows():
-        xs.append(F(row[treatment], data, treatment))
-        ys.append(gamma(row[treatment], data, ij_df, mu_est, pi_est, fa_est, treatment, outcome))
+        if row[treatment] not in seen:
+            xs.append(F(row[treatment], data, treatment))
+            ys.append(gamma(row[treatment], data, ij_df, mu_est, pi_est, fa_est, treatment, outcome))
+            seen.add(row[treatment])
     
     
     sorted_idx = np.argsort(xs)
@@ -187,23 +194,34 @@ def is_convex(x, f):
     return True
 
 
-def compute_ground(treatment_value, treatment="T", outcome="Y"):
-    df1 = pd.read_csv("synthetic_data.csv")
-    df2 = pd.read_csv("synthetic_data_addition.csv")
+def compute_ground(data, treatment_value, treatment="T", outcome="Y"):
+    # df1 = pd.read_csv("synthetic_data.csv")
+    # df2 = pd.read_csv("synthetic_data_addition.csv")
+    
     # data = df1
     
-    data = pd.concat([df1, df2], ignore_index=True)
+    # data = pd.concat([df1, df2], ignore_index=True)
     
     data[treatment] = treatment_value
     
-    b0, b1, b2, b3, b4 = -1, 0.1, -0.5, 0.3, 0.8  # Coefficients
+    # b0, b1, b2, b3, b4 = -1, 0.1, -0.5, 0.3, 0.8  # Coefficients
+    
+    # logit = (
+    #     b0
+    #     + b1 * data["X1"]
+    #     + b2 * data["X2"]
+    #     + b3 * data["X3"]
+    #     + b4 * data[treatment]
+    # )
+    
+    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -1, 0.5, 0.1, 0.3, 0.8  # Coefficients
     
     logit = (
-        b0
-        + b1 * data["X1"]
-        + b2 * data["X2"]
-        + b3 * data["X3"]
-        + b4 * data[treatment]
+        intercept
+        + coef_old * data["Old"]
+        + coef_white * data["White"]
+        + coef_unhealthy * data["Unhealthy"]
+        + coef_align * data["Align_Score"]
     )
     
     prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
@@ -226,7 +244,9 @@ def backdoor(a, data, treatment="T", outcome="Y"):
     
     confounders = [col for col in data.columns if col not in [outcome]]
     
-    formula = f"{outcome} ~ {" + ".join(confounders)}"
+    formula = f"{outcome} ~ 1 + {" + ".join(confounders)}"
+    
+    print(formula)
     model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
     data_a = data.copy()
     data_a[treatment] = a
@@ -248,9 +268,15 @@ def verify(xs, ys, gcm_x, gcm_y):
 
 
 def main():
-    data = pd.read_csv("synthetic_data.csv").head(200)
-
-    xlist, ylist = get_points(data)   
+    # data = pd.read_csv("synthetic_data.csv").head(100)
+    data = pd.read_csv("small_dropped.csv")
+    # data = pd.read_csv("cleaned_data.csv").head(200)
+    
+    
+    treatment = "Align_Score"
+    outcome = "Cancer"
+    
+    xlist, ylist = get_points(data, treatment=treatment, outcome=outcome)   
 
     gcm_x, gcm_y = non_smooth_gcm(xlist, ylist)
     
@@ -267,9 +293,9 @@ def main():
     # plt.plot(range(-20, 20), [theta(i, gcm_x, gcm_y, data, treatment="T")for i in range(-20, 20)] , color='red', label="Estimate", marker='x')
     
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
-    plt.plot(range(-20, 20), [cubic_spline(F(i, data, treatment="T"), 1) for i in range(-20, 20)] , color='red', label="Estimate", marker='x')
-    plt.plot(range(-20, 20), [compute_ground(i) for i in range(-20, 20)], color='blue', label="Ground", marker='o')
-    plt.plot(range(-20, 20), [backdoor(i, data) for i in range(-20, 20)], color='green', label="Backdoor", marker='+')
+    plt.plot(np.arange(0, 15.5, 0.5), [cubic_spline(F(i, data, treatment=treatment), 1) for i in np.arange(0, 15.5, 0.5)] , color='red', label="Estimate", marker='x')
+    plt.plot(np.arange(0, 15.5, 0.5), [compute_ground(data, i, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='blue', label="Ground", marker='o')
+    plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
         
     plt.grid(True)
@@ -282,7 +308,7 @@ def main():
     # plt.plot(X_grid, deriv_1, color='green', label='Spline')
     
     plt.plot(gcm_x, gcm_y, color='red', label='GCM', marker='x')
-    plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x, 2) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
+    # plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
     plt.scatter(xlist, ylist, color='blue', label='Points')
 
     # Add labels and title
