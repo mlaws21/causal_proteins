@@ -7,6 +7,8 @@ import os
 from tqdm import tqdm
 import pandas as pd
 
+# TODO weighted avg
+
 def get_atom_coords_by_residue_from_cif(cif_file):
     """Extracts the coordinates of all atoms, grouped by residue, from a .cif file."""
     parser = MMCIFParser()
@@ -69,7 +71,7 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
     """Compares two structures by calculating distances and extracting pLDDT scores."""
     residues2cords1, residues2plddt1 = extract_plddt_and_coords(cif1, json1)
     residues2cords2, residues2plddt2 = extract_plddt_and_coords(cif2, json2)
-
+    
     if len(residues2cords1) != len(residues2cords2):
         return None
 
@@ -94,9 +96,13 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
             if len(residue_coords1) == len(residue_coords2):
                 for c1, c2, p1, p2 in zip(residue_coords1, residue_coords2, residue_plddt1, residue_plddt2):
                     # print(ctr, (p1 + p2) / 2)
+                    
+                    # NOTE: CHANGED
                     if (p1 + p2) / 2 > thresh:
                         P.append(c1)
                         Q.append(c2)
+                        
+
                     # else:
                     #     # hmm, is this okay?
                     #     P.append([0,0,0])
@@ -188,7 +194,7 @@ def augment_data(reference):
     
     out_root = "/shared/25mdl4/af_output/"
     
-    data = pd.read_csv("small_prion.csv")
+    data = pd.read_csv("nice_data.csv")
     
     # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,is_pathogenic
     # ids = data["ID"]
@@ -198,11 +204,7 @@ def augment_data(reference):
     # name = name.replace(":", "_").replace(">", "_").lower()
     for i, row in tqdm(data.iterrows()):
         
-        # print(row["mut"])
-        if pd.isna(row["ID"]):
-            name = "reference"
-        else:
-            name = row["ID"].replace(":", "_").replace(">", "_").lower()
+        name = row["ID"].replace(":", "_").replace(">", "_").lower()
         
         folder1 = os.path.join(out_root, name)
         folder2 = os.path.join(out_root, reference)
@@ -223,7 +225,7 @@ def augment_data(reference):
             print(f"WARNING: nonsense mutation -- skipping")
             continue
             
-        row["Align_Score"] = align_score
+        row["Align Score"] = align_score
         
         valid_rows.append(row)
         
@@ -232,8 +234,43 @@ def augment_data(reference):
     updated_data.to_csv("align.csv", index=False)
     
     
+def compute_align(name1, name2):
+    
+    out_root = "/shared/25mdl4/af_output/"
+    
+    
+    # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,is_pathogenic
+    # ids = data["ID"]
+    
+
+    folder1 = os.path.join(out_root, name1)
+    folder2 = os.path.join(out_root, name2)
         
-augment_data("prion_ref")
+    
+    if not os.path.isdir(folder1) or not os.path.isdir(folder2):
+        print(f"ERROR: {name1} invalid path -- skipping" )
+        exit(-1)
+    
+    
+    cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
+    cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
+    json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
+    json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
+    align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
+    
+    # if align_score is None:
+    #     print(f"WARNING: nonsense mutation -- skipping")
+    #     continue
+    return align_score
+    # row["Align Score"] = align_score
+    
+    # valid_rows.append(row)
+        
+    # updated_data = pd.DataFrame(valid_rows)
+    
+    # updated_data.to_csv("align.csv", index=False)
+
+# augment_data()
 
 
 # folder1 = out_root + sys.argv[1]

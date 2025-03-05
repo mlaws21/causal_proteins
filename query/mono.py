@@ -274,7 +274,7 @@ def verify_spline_convex(spline, data, treatment):
     myrange = np.linspace(data[treatment].min(), data[treatment].max(), 100)
     snd_derivs = np.array([spline(F(i, data, treatment=treatment), 2) for i in myrange])
     
-    # assert(np.all(snd_derivs >= 0))
+    assert(np.all(snd_derivs >= 0))
     # print(snd_derivs)
     
 
@@ -307,9 +307,6 @@ def main():
     
     # cubic_spline = build_cubic_spline(gcm_x, gcm_y)
     cubic_spline = build_cubic_spline(xlist, ylist)
-    
-    with open("spline.pkl", "wb") as f:
-        pickle.dump((xlist, ylist), f)
     
     verify_spline_convex(cubic_spline, data, treatment)
     

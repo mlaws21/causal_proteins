@@ -41,7 +41,7 @@ def parse_hgvs(hgvs):
             }
         )
         
-    
+    # print(out)
     return out
     
 def extract_exon_locations(filename):
@@ -94,9 +94,7 @@ def reconstruct_cds(seq, exon_ranges):
         return None
     cds = ""
     for start, end in exon_ranges:
-        
-        # FIXME this is start-1 if we are dealing with BRCA but idk why it isnt with prion
-        cds += seq[start:end]  # Extract each exon and concatenate
+        cds += seq[start-1:end]  # Extract each exon and concatenate
     return cds
 
 
@@ -117,7 +115,7 @@ def transcribe_and_translate(cds):
     
     # print(cds)
     
-    dna_seq = dna_seq
+    dna_seq = dna_seq.reverse_complement()
     
     # print(dna_seq)
 
@@ -139,55 +137,58 @@ def transcribe_and_translate(cds):
 def mutate_gene(gene, mutations, diagnosis, exons, isoform, expected_len, start):
     seqs = []
     
+    # # print("len(unique(muts))", len(set(mutations)), len(diagnosis))
+    # if len(mutations) == 0:
+    #     mut_protein = transcribe_and_translate(reconstruct_cds(gene, exons[isoform]))
+        
+        
+    #     seqs.append((None, mut_protein, "Benign"))
+        
+    #     return seqs
     
-    # print("len(unique(muts))", len(set(mutations)), len(diagnosis))
-
     for mut, diag in zip(mutations, diagnosis):
         
-        if mut == "":  
-            ref_protein = transcribe_and_translate(reconstruct_cds(gene, exons[isoform]))
+        if mut == "":
+            mut_protein = transcribe_and_translate(reconstruct_cds(gene, exons[isoform]))
+        
+            seqs.append((mut, mut_protein, diag)) 
+        else:
+                
+            hgvs = parse_hgvs(mut)
             
-            seqs.append(("", ref_protein, diag))
-            continue
+            
+            # we can remove these one day when i am not lazy
+            # if len(hgvs) > 1:
+            #     continue
+            
+            
+            # row = hgvs[0]
+            
 
-        # truncation
-        # if len(mut_protein) != expected_len:
-        #     continue
-        
-        hgvs = parse_hgvs(mut)
-        
-        
-        # we can remove these one day when i am not lazy
-        if len(hgvs) > 1:
-            continue
-        
-        
-        row = hgvs[0]
-        
-        
-        if len(row["ref"]) != len(row["alt"]):
-            continue
-        
-        if row["start"] <= start:
-            continue
-        
-        
-        
-        # print("here")
-        mut_end = row["start"] + len(row["ref"]) - start
-        mut_start = row["start"] - start
-        
-        mutated = gene[:mut_start] + row["alt"] + gene[mut_end:]
+            
+            for row in hgvs:
+                        
+                assert len(row["ref"]) == len(row["alt"])
+                    # continue
+                
+                assert row["start"] > start
+                    # continue
+                
+            # print("here")
+                mut_end = row["start"] + len(row["ref"]) - start
+                mut_start = row["start"] - start
+                
+                gene = gene[:mut_start] + row["alt"] + gene[mut_end:]
 
-        # print(len(mutated))
-        
-        mut_protein = transcribe_and_translate(reconstruct_cds(mutated, exons[isoform]))
-        
-        # truncation
-        if len(mut_protein) != expected_len:
-            continue
-        
-        seqs.append((mut, mut_protein, diag))
+                # print(len(mutated))
+                
+            mut_protein = transcribe_and_translate(reconstruct_cds(gene, exons[isoform]))
+                
+            # truncation
+            if len(mut_protein) != expected_len:
+                continue
+            
+            seqs.append((mut, mut_protein, diag))
 
         
     return seqs
@@ -202,7 +203,7 @@ def mutate_gene(gene, mutations, diagnosis, exons, isoform, expected_len, start)
 # - age (old/young) old more likely to have mutation
 # - race  (white/non-white) -- what if we split the stuff into two sub pops and weighted sample
 # - lifestyle (healthy/unhealthy) unhealty more likely
-def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
+def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=1000):
     
     rows = []
     for _ in range(num_datapoints):
@@ -227,8 +228,7 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
         is_pathogenic = random.uniform(0, 1) < pathogenic_chance
         
         # print(is_pathogenic)
-        print("----------------------------")
-        print(pathogenic_seqs, benign_seqs)
+
         if is_pathogenic:
             to_sample = pathogenic_seqs
         else:
@@ -244,7 +244,7 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
                 "Old": age,
                 "White": race,
                 "Unhealthy": lifestyle,
-                "Align Score": alignment,
+                "Align_Score": alignment,
                 "Cancer": cancer,
                 "Sequence": seq,
                 "is_pathogenic": is_pathogenic}
@@ -253,12 +253,9 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
     
     df = pd.DataFrame(rows)
     
-    df.to_csv('small_prion.csv', index=False)
+    df.to_csv('data.csv', index=False)
     
-
-
-def brca_driver():
-    
+def generate_brca_mutations(hgvs_muts, diagnosis):
     start = 43044295
     end = 43170327
     isoform = "NP_001394531.1"
@@ -266,15 +263,23 @@ def brca_driver():
     
     gene = extract_full_gene("hg38_chr17.fasta", start, end)
 
-    mutation_data = pd.read_csv("brca1_data.csv")
-    
-    hgvs_muts = mutation_data["Genomic_Coordinate_hg38"]
-    diagnosis = mutation_data["Clinical_significance_ENIGMA"] == "Pathogenic"
-    
     exons = extract_exon_locations("brca1_hg38_chr17.gb")
     
     gene_muts = mutate_gene(gene, hgvs_muts, diagnosis, exons, isoform, expected_len, start)
+
+    return gene_muts
     
+    
+def brca_driver():
+    
+    mutation_data = pd.read_csv("brca1_data.csv")
+    hgvs_muts = mutation_data["Genomic_Coordinate_hg38"]
+    diagnosis = mutation_data["Clinical_significance_ENIGMA"] == "Pathogenic"
+    
+    
+    gene_muts = generate_brca_mutations(hgvs_muts, diagnosis)
+    
+
     
     # print((set(gene_muts)))
     
@@ -312,79 +317,13 @@ def brca_driver():
     # print(benign, cancer)
     
     
-# first go to NCBI and download hg38 chromosome gene is on
-# search the gene in NCBI
-# go to the genomic context section and grab location start and end and enter them below
-# go to "Genomic regions, transcripts, and products"
-# --> click Go to nucleotide: GenBank
-# look through .gb file for isoform you like
-# get the len of that isoform and enter below too
-
-def prion_driver():
     
-    start = 4686456
-    end = 4701588
-    isoform = "NP_001073590.1"
-    expected_len = 253 
+    # print(len(mutated_proteins_disease))
     
-    gene = extract_full_gene("hg38_chr20.fasta", start, end)
-
-    # print(len(gene))
-    
-    # mutation_data = pd.read_csv("brca1_data.csv")
-    
-    # hgvs_muts = mutation_data["Genomic_Coordinate_hg38"]
-    # diagnosis = mutation_data["Clinical_significance_ENIGMA"] == "Pathogenic"
-    
-    exons = extract_exon_locations("prnp_hg38_chr20.gb")
-    
-    hgvs_muts = ["", "chr20:4688936:C>T", "chr20:4699570:C>T"]
-    diagnosis = [False, True, False]
-    print(exons)
-    
-    gene_muts = mutate_gene(gene, hgvs_muts, diagnosis, exons, isoform, expected_len, start)
-    
-    
-    print((set(gene_muts)))
-    
-    
-    # [print(x) for x in mutated_proteins]
-    # print(len(mutated_proteins), len(set(mutated_proteins)))
-    benign = set([(x, y) for x, y, z in gene_muts if not z])
-    cancer = set([(x, y) for x, y, z in gene_muts if z])
-    
-    
-    # TODO this is so ugly
-    unique_benign = []
-    seen = set()
-    for i in benign:
-        if i[1] not in seen:
-            unique_benign.append(i)
-            seen.add(i[1])
-
-    unique_cancer = []
-    seen = set() 
-    for i in cancer:
-        if i[1] not in seen:
-            unique_cancer.append(i)
-            seen.add(i[1])
-                
-    
-    
-    # # benign = set([y for x, y, z in gene_muts if not z])
-    # # cancer = set([y for x, y, z in gene_muts if z])
-    
-    # print(len(unique_benign), len(unique_cancer))
-
-    
-    generate_data(unique_benign, unique_cancer)
-    # print(benign, cancer)
-    
-    
-
 def main():
-    # brca_driver()
-    prion_driver()
+    brca_driver()
+    
+    # print(generate_brca_mutations(["chr17:43094113:T>A"], ["Pathogenic"]))
     
     
     

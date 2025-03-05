@@ -95,7 +95,7 @@ def fold(name, seq, partition):
 
 
 def fold_all(data_file, partition):
-    df = pd.read_csv("nice_data.csv")
+    df = pd.read_csv("small_prion.csv")
     
     
     # Example function to be executed by threads
