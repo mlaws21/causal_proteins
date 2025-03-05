@@ -94,11 +94,13 @@ def reconstruct_cds(seq, exon_ranges):
         return None
     cds = ""
     for start, end in exon_ranges:
-        cds += seq[start-1:end]  # Extract each exon and concatenate
+        # FIXME this is start-1 if we are dealing with BRCA but idk why it isnt with prion
+        
+        cds += seq[start:end]  # Extract each exon and concatenate
     return cds
 
 
-def transcribe_and_translate(cds):
+def transcribe_and_translate(cds, reverse=False):
     """Transcribes a DNA CDS to RNA and translates it to a protein sequence.
 
     Args:
@@ -115,7 +117,8 @@ def transcribe_and_translate(cds):
     
     # print(cds)
     
-    dna_seq = dna_seq.reverse_complement()
+    if reverse: 
+        dna_seq = dna_seq.reverse_complement()
     
     # print(dna_seq)
 
@@ -267,6 +270,78 @@ def generate_brca_mutations(hgvs_muts, diagnosis):
     
     gene_muts = mutate_gene(gene, hgvs_muts, diagnosis, exons, isoform, expected_len, start)
 
+    return gene_muts
+
+def parse_xnx(xnx, base):
+
+    ref = base.lower()
+    
+    for mut in xnx.split("_"):
+
+        outchar = mut[0]
+        inchar = mut[-1]
+        
+        position = int(mut[1:-1])
+        # print(ref[position-1], outchar, inchar, position)
+        assert ref[position-1] == outchar
+        
+        if inchar == "-":
+            # print("uere")
+            ref = ref[:position-1] 
+        else:
+            ref = ref[:position-1] + inchar + ref[position:]
+    
+
+    return ref.upper()
+
+def mutate_gene_xnx(gene, mutations, diagnosis, exons, isoform, expected_len, start):
+    seqs = []
+    
+    
+    # print("len(unique(muts))", len(set(mutations)), len(diagnosis))
+
+    for mut, diag in zip(mutations, diagnosis):
+        
+        ref_protein = transcribe_and_translate(reconstruct_cds(gene, exons[isoform]))
+        # print(ref_protein)
+        if mut == "":  
+            
+            seqs.append(("", ref_protein, diag))
+            continue
+
+        # truncation
+        # if len(mut_protein) != expected_len:
+        #     continue
+        
+
+        
+       
+
+        # print(len(mutated))
+        mut = mut.replace("*", "-")
+        mut_protein = parse_xnx(mut, ref_protein)
+        
+        # truncation
+        if len(mut_protein) != expected_len:
+            continue
+        
+        seqs.append((mut, mut_protein, diag))
+
+        
+    return seqs
+
+def generate_prion_mutation(xnx_muts, diagnosis):
+    
+    start = 4686456
+    end = 4701588
+    isoform = "NP_001073590.1"
+    expected_len = 253 
+    
+    gene = extract_full_gene("hg38_chr20.fasta", start, end)
+    exons = extract_exon_locations("prnp_hg38_chr20.gb")
+    
+    gene_muts = mutate_gene_xnx(gene, xnx_muts, diagnosis, exons, isoform, expected_len, start)
+    
     return gene_muts
     
     

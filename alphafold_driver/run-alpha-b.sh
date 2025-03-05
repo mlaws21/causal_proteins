@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH -c 8               # Request 1 CPU core
+#SBATCH -c 16               # Request 1 CPU core
 #SBATCH -t 0-02:00          # Runtime in D-HH:MM, minimum of 10 mins
                                 # (this requests 2 hours)
 #SBATCH --partition=gpmoo-b          # Partition to submit to
@@ -10,6 +10,7 @@
 #SBATCH -e myerrors_%j.err  # File to which STDERR will be written
                                 # (%j inserts jobid)
 #SBATCH --gres=gpu:1        # Request two GPUs           
+
 
 # Command you want to run on the cluster
 # Notice, you must set-up testEval correctly as a conda virtual environment

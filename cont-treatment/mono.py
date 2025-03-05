@@ -215,7 +215,11 @@ def compute_ground(data, treatment_value, treatment="T", outcome="Y"):
     #     + b4 * data[treatment]
     # )
     
-    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.3
+    #BRCA COEFFS
+    # intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.3
+    
+    #PRION COEFFS
+    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.8  # Coefficients
     
     logit = (
         intercept
@@ -294,7 +298,7 @@ def main():
     
     print("COUNT:", count)
     # data = pd.read_csv("synthetic_data.csv").head(100)
-    data = pd.read_csv("final_clean.csv").head(count)
+    data = pd.read_csv("prion_data.csv").head(count)
     # data = pd.read_csv("cleaned_data.csv").head(200)
     
     
@@ -308,7 +312,7 @@ def main():
     # cubic_spline = build_cubic_spline(gcm_x, gcm_y)
     cubic_spline = build_cubic_spline(xlist, ylist)
     
-    with open("spline.pkl", "wb") as f:
+    with open("prion_spline.pkl", "wb") as f:
         pickle.dump((xlist, ylist), f)
     
     verify_spline_convex(cubic_spline, data, treatment)
@@ -339,7 +343,7 @@ def main():
         
     plt.grid(True)
     plt.legend()
-    plt.savefig(f"dose_response{str(count)}.png", format="png", dpi=300)
+    plt.savefig(f"prion_dose_response{str(count)}.png", format="png", dpi=300)
     
      
     plt.clf()
@@ -358,7 +362,7 @@ def main():
     # Add grid and legend
     plt.grid(True)
     plt.legend()
-    plt.savefig(f"gcm{str(count)}.png", format="png", dpi=300)
+    plt.savefig(f"prion_gcm{str(count)}.png", format="png", dpi=300)
 
 
 if __name__ == "__main__":

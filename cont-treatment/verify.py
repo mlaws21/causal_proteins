@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load the CSV file
-df = pd.read_csv("final_full.csv")
+df = pd.read_csv("prion_data.csv")
 
 
 # print(df["Align_Score"])
@@ -15,7 +15,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Load the DataFrame
-df = pd.read_csv("final_full.csv")
+# df = pd.read_csv("final_full.csv")
 
 # Choose the column to plot
 column_name = "Align_Score"  # Replace with the actual column name

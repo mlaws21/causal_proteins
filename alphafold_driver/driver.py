@@ -95,13 +95,13 @@ def fold(name, seq, partition):
 
 
 def fold_all(data_file, partition):
-    df = pd.read_csv("small_prion.csv")
+    df = pd.read_csv("prion_uniprot.csv")[::-1]
     
     
     # Example function to be executed by threads
 
     
-    num_workers = 4 if partition == "a" else 6
+    num_workers = 3 if partition == "a" else 7
 # Create a ThreadPoolExecutor with 4 threads
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
@@ -147,7 +147,7 @@ def main():
         print("Usage python driver.py [a/b]")
         exit(1)
         
-    assert sys.argv[1] in ["a", "b"]
+    assert sys.argv[1] in ["a", "b", "b1"]
     
     
     fold_all("data.json", sys.argv[1])

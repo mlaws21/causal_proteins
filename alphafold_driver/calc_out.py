@@ -4,7 +4,7 @@ import numpy as np
 def compute_out():
     data = pd.read_csv("align.csv")
     
-    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.3  # Coefficients
+    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.8  # Coefficients
     
     logit = (
         intercept
@@ -21,6 +21,6 @@ def compute_out():
     print(np.mean(data["Cancer"]))
     
 
-    data.to_csv("final.csv", index=False)
+    data.to_csv("prion_data.csv", index=False)
     
 compute_out()

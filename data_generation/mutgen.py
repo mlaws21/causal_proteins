@@ -191,6 +191,62 @@ def mutate_gene(gene, mutations, diagnosis, exons, isoform, expected_len, start)
 
         
     return seqs
+
+def parse_xnx(xnx, base):
+
+    ref = base.lower()
+    
+    for mut in xnx.split("_"):
+
+        outchar = mut[0]
+        inchar = mut[-1]
+        
+        position = int(mut[1:-1])
+        assert ref[position-1] == outchar
+        
+        if inchar == "-":
+            # print("uere")
+            ref = ref[:position-1] 
+        else:
+            ref = ref[:position-1] + inchar + ref[position:]
+    
+
+    return ref.upper()
+
+def mutate_gene_xnx(gene, mutations, diagnosis, exons, isoform, expected_len, start):
+    seqs = []
+    
+    
+    # print("len(unique(muts))", len(set(mutations)), len(diagnosis))
+
+    for mut, diag in zip(mutations, diagnosis):
+        
+        ref_protein = transcribe_and_translate(reconstruct_cds(gene, exons[isoform]))
+        if mut == "":  
+            
+            seqs.append(("", ref_protein, diag))
+            continue
+
+        # truncation
+        # if len(mut_protein) != expected_len:
+        #     continue
+        
+
+        
+       
+
+        # print(len(mutated))
+        mut = mut.replace("*", "-")
+        mut_protein = parse_xnx(mut, ref_protein)
+        
+        # truncation
+        if len(mut_protein) != expected_len:
+            continue
+        
+        seqs.append((mut, mut_protein, diag))
+
+        
+    return seqs
     
 
 # vars effecting brest cancer (response):
@@ -202,7 +258,7 @@ def mutate_gene(gene, mutations, diagnosis, exons, isoform, expected_len, start)
 # - age (old/young) old more likely to have mutation
 # - race  (white/non-white) -- what if we split the stuff into two sub pops and weighted sample
 # - lifestyle (healthy/unhealthy) unhealty more likely
-def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
+def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=1000):
     
     rows = []
     for _ in range(num_datapoints):
@@ -227,8 +283,8 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
         is_pathogenic = random.uniform(0, 1) < pathogenic_chance
         
         # print(is_pathogenic)
-        print("----------------------------")
-        print(pathogenic_seqs, benign_seqs)
+        # print("----------------------------")
+        # print(pathogenic_seqs, benign_seqs)
         if is_pathogenic:
             to_sample = pathogenic_seqs
         else:
@@ -244,7 +300,7 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
                 "Old": age,
                 "White": race,
                 "Unhealthy": lifestyle,
-                "Align Score": alignment,
+                "Align_Score": alignment,
                 "Cancer": cancer,
                 "Sequence": seq,
                 "is_pathogenic": is_pathogenic}
@@ -253,7 +309,7 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=5):
     
     df = pd.DataFrame(rows)
     
-    df.to_csv('small_prion.csv', index=False)
+    df.to_csv('prion_uniprot.csv', index=False)
     
 
 
@@ -338,14 +394,21 @@ def prion_driver():
     
     exons = extract_exon_locations("prnp_hg38_chr20.gb")
     
-    hgvs_muts = ["", "chr20:4688936:C>T", "chr20:4699570:C>T"]
-    diagnosis = [False, True, False]
-    print(exons)
+    mutation_data = pd.read_csv("prion_muts.csv")
     
-    gene_muts = mutate_gene(gene, hgvs_muts, diagnosis, exons, isoform, expected_len, start)
+    muts = mutation_data["mutation"]
+    diag = mutation_data["diagnosis"] == "pathogenic"
     
     
-    print((set(gene_muts)))
+    
+    # hgvs_muts = ["", "chr20:4688936:C>T", "chr20:4699570:C>T"]
+    # diagnosis = [False, True, False]
+    # print(exons)
+    
+    gene_muts = mutate_gene_xnx(gene, muts, diag, exons, isoform, expected_len, start)
+    
+    
+    # print((set(gene_muts)))
     
     
     # [print(x) for x in mutated_proteins]

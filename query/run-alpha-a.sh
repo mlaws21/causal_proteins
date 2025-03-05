@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH -c 8               # Request 1 CPU core
+#SBATCH -c 16             # Request 1 CPU core
 #SBATCH -t 0-02:00          # Runtime in D-HH:MM, minimum of 10 mins
                                 # (this requests 2 hours)
 #SBATCH --partition=gpmoo-a          # Partition to submit to
