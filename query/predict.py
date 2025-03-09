@@ -93,9 +93,9 @@ def draw_dose_response(full_data_filename="final_full.csv", spline_filename="spl
     plt.legend()
     plt.savefig("dose_response.png", format="png", dpi=300)
 
-def calc_point_and_conf(intervention_data_filename, spline_filename):
-    with_point, with_boot = calc_effect(intervention_data_filename, spline_filename=spline_filename,treatment="Align_Score_do_mut") 
-    wo_point, wo_boot= calc_effect(intervention_data_filename, spline_filename=spline_filename, treatment="Align_Score_do_no_mut")
+def calc_point_and_conf(intervention_data_filename, full_data_filename, spline_filename):
+    with_point, with_boot = calc_effect(intervention_data_filename, full_data_filename, spline_filename=spline_filename,treatment="Align_Score_do_mut") 
+    wo_point, wo_boot= calc_effect(intervention_data_filename, full_data_filename, spline_filename=spline_filename, treatment="Align_Score_do_no_mut")
     
     boots_stuff = with_boot - wo_boot
     
@@ -120,7 +120,7 @@ def main():
     # effect = calc_effect(intervention_data_filename, treatment="Align_Score_do_mut") - calc_effect(intervention_data_filename, treatment="Align_Score_do_no_mut")
     
     
-    print(calc_point_and_conf(intervention_data_filename))
+    print(calc_point_and_conf(intervention_data_filename, "prion_spline.pkl"))
     
     
     

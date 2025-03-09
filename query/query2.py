@@ -197,8 +197,8 @@ def thread(mut, data, partition):
     
     filename = f'post_treatment_{mut.ID}_{"p" if mut_data.is_pathogenic else "b"}.csv'
     
-    with open("prion_output.txt", "a") as file:
-        print(f'{mut} [{mut.is_pathogenic}]: {calc_point_and_conf(filename, spline_filename)}', file=file)
+    # with open("prion_output.txt", "a") as file:
+    #     print(f'{mut} [{mut.is_pathogenic}]: {calc_point_and_conf(filename, spline_filename)}', file=file)
 
          
         
