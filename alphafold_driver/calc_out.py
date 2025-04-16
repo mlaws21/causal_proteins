@@ -14,10 +14,11 @@ def compute_out():
         + coef_align * data["Align_Score"]
     )
     
+    # print(logit)
     prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
     
     data["Cancer"] = np.random.binomial(1, prob_Y)
-    
+    # print(data["Cancer"])
     print(np.mean(data["Cancer"]))
     
 

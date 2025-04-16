@@ -1,5 +1,13 @@
 from Bio.Align import substitution_matrices
 
+def blosum_scores(ref, seqs, log_fn):
+    out = []
+    for i, x in enumerate(seqs):
+        if i % (len(seqs) // 10) == 0:
+            log_fn(f"{(i / len(seqs)) * 100:.0f}% complete")
+            
+        out.append(blosum_align(ref, x))
+    return out
 
 def blosum_align(s1, s2, gap_pen=6):
     """function that prints out the best global alignment of two sequences

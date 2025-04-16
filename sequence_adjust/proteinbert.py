@@ -1,16 +1,29 @@
 
+# this is hard code path from main
+from sequence_adjust.protein_bert_helper.proteinbert import load_pretrained_model
+from sequence_adjust.protein_bert_helper.proteinbert.conv_and_global_attention_model import get_model_with_hidden_layers_as_outputs
+from scipy.spatial.distance import cosine
 
-from protein_bert.proteinbert import load_pretrained_model
-from protein_bert.proteinbert.conv_and_global_attention_model import get_model_with_hidden_layers_as_outputs
+# note it can be shorter -- so nonsense is ok?
+def protein_bert_scores(ref, seqs, seq_len=253):
 
-pretrained_model_generator, input_encoder = load_pretrained_model()
+    pretrained_model_generator, input_encoder = load_pretrained_model()
+    
+    seqs = [ref, *seqs]
+    
+    seq_len += 2
+    model = get_model_with_hidden_layers_as_outputs(pretrained_model_generator.create_model(seq_len))
+    encoded_x = input_encoder.encode_X(seqs, seq_len)
+    _, global_representations = model.predict(encoded_x, batch_size=32, verbose=0)
+    dists = [cosine(global_representations[0], global_representations[x]) for x in range(1, len(global_representations))]
 
-seqs = ["MQAQA"]
-seq_len = len(seqs[0]) + 2
-model = get_model_with_hidden_layers_as_outputs(pretrained_model_generator.create_model(seq_len))
-encoded_x = input_encoder.encode_X(seqs, seq_len)
-local_representations, global_representations = model.predict(encoded_x, batch_size=1)
-# ... use these as features for other tasks, based on local_representations, global_representationss
+    return dists
+    
+def main():
+    ref = "MANLGCWMLVLFVATWSDLGLCKKRPKPGGWNTGGSRYPGQGSPGGNRYPPQGGGGWGQPHGGGWGQPHGGGWGQPHGGGWGQPHGGGWGQGGGTHSQWNKPSKPKTNMKHMAGAAAAGAVVGGLGGYMLGSAMSSPIIHFGSDYEDRYYRENMHRYPNQVYYRPMDEYSNQNNFVHDCVNITIKQHTVTTTTKGENFTETDVKMMERVVEQMCITQYERESQAYYQRGSSMVLFSSPPVILLISFLIFLIVG"
+    seqs = ["MANLGCWMLVLFVATWSDLGLCKKRPKPGGWNTGGSRYPGQGSPGGNRYPPQGGGGWGQPHGGGWGQPHGGGWGQPHGGGWGQPHGGGWGQGGGTHSQWNKPSKPKTNMKHMAGAAAAGAVVGGLGGYMLGSAMSRPIIHFGSDYEDRYYRENMHRYPNQVYYRPMDEYSNQNNFVHDCVNITIKQHTVTTTTKGENFTETDVKMMERVVEQMCITQYERESQAYYQRGSSMVLFSSPPVILLISFLIFLIVG", "MANLGCWMLVLFVATWSDLGLCKKRPKPGGWNTGGSRYPGQGSPGGNRYPPQGGGGWGQPHGGGWGQPHGGGWGQPHGGGWGQPHGGGWGQGGGTHSQWNKPSKPKTNMKHMAGAAAAGAVVGGLGGYMLGSAMSRPIIHFGSDYEDRYYRENMHRYPNQVYYRPMDEYSNQNNFVHDCVNITIKQHTVTTTTKGENFTETDVKMMERVVEQMCITQYERESQAYYQRGSSMVFFSSPPVILLISFLIFLIVG"]
+    print(protein_bert_scores(ref, seqs))
+        
 
-print(global_representations.shape)
-print(local_representations.shape)
+if __name__ == "__main__":
+    main()

@@ -235,6 +235,21 @@ def compute_ground(data, treatment_value, treatment="T", outcome="Y"):
     
     return data[outcome].mean()
 
+def compute_ground_truth(data, treatment_value, treatment, outcome, coeffs):
+
+    data[treatment] = treatment_value
+    
+    
+    columns = data.columns.tolist()
+    
+    logit = coeffs["Intercept"] + sum([coeffs[x] * data[x] for x in columns])
+    
+    prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
+    
+    data[outcome] = np.random.binomial(1, prob_Y)
+    
+    return data[outcome].mean()
+
 def build_cubic_spline(x_data, f_data):
 
     x_data = np.asarray(x_data, dtype=float)
@@ -287,6 +302,68 @@ def verify_spline_convex(spline, data, treatment):
     plt.clf()
 
 #TODO Make sure the spline is convex -- but pretty close
+
+def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, treatment="Align_Score", outcome="Disease"):
+    
+    dr_pkl = f"pickes/{project_name}_spline.pkl"
+    
+    if os.path.exists(dr_pkl):
+        log_fn(f"Reading in Dose Response Curve from pickes/{project_name}_spline.pkl")
+        
+        with open(dr_pkl, "rb") as f:
+            xlist, ylist = pickle.load(f)
+            
+    else:
+        log_fn(f"Generating Dose Response Curve for {len(patient_numerical_data)} patients")
+
+        xlist, ylist = get_points(patient_numerical_data, treatment=treatment, outcome=outcome)   
+
+        gcm_x, gcm_y = non_smooth_gcm(xlist, ylist)
+        
+        assert verify(xlist, ylist, gcm_x, gcm_y)
+        
+        # cubic_spline = build_cubic_spline(gcm_x, gcm_y)
+        
+        with open(f"{project_name}_spline.pkl", "wb") as f:
+            pickle.dump((xlist, ylist), f)
+            
+    log_fn("Building Spline")
+    cubic_spline = build_cubic_spline(xlist, ylist)
+    
+    dr_graph_file = f"{project_name}_dr_curve.png"
+    # TODO: cubic spline not fully convex... its like basically there but a little noisy
+    plt.plot(np.arange(0, 15.5, 0.5), [cubic_spline(F(i, data, treatment=treatment), 1) for i in np.arange(0, 15.5, 0.5)] , color='red', label="Estimate", marker='x')
+    plt.plot(np.arange(0, 15.5, 0.5), [compute_ground(data, i, coeffs, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='blue', label="Ground", marker='o')
+    # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
+    
+    plt.xlabel("Alignment Score (Å)")
+    plt.ylabel("Probability of Cancer")
+    plt.title("Dose Response Curve")
+        
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(dr_graph_file, format="png", dpi=300)
+    log_fn(f"Saving Dose Response Graph to {dr_graph_file}")
+    
+     
+    plt.clf()
+
+    gcm_graph_file = f"{project_name}_gcm.png"
+    
+    plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
+    plt.scatter(xlist, ylist, color='blue', label='Points')
+
+    # Add labels and title
+    plt.xlabel("F(Align Score)") # where F is the continous emperical distribution
+    plt.ylabel("Gamma") # that crazy formula
+    plt.title("Global Convex Minorant (GCM)")
+
+    # Add grid and legend
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(gcm_graph_file, format="png", dpi=300)
+    log_fn(f"Saving GCM Graph to {dr_graph_file}")
+
 
 
 def main():

@@ -16,4 +16,4 @@
 *.png
 old/*
 *pycache*
-sequence_adjust/protein_bert
+sequence_adjust/protein_bert_helper

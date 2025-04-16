@@ -258,15 +258,18 @@ def mutate_gene_xnx(gene, mutations, diagnosis, exons, isoform, expected_len, st
 # - age (old/young) old more likely to have mutation
 # - race  (white/non-white) -- what if we split the stuff into two sub pops and weighted sample
 # - lifestyle (healthy/unhealthy) unhealty more likely
-def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=1000):
+def generate_synth(benign_seqs, pathogenic_seqs, num_datapoints=1000):
+    random.seed(42)
     
+    benign_seqs = list(benign_seqs.itertuples(index=False, name=None))
+    pathogenic_seqs = list(pathogenic_seqs.itertuples(index=False, name=None))
+
     rows = []
+    
     for _ in range(num_datapoints):
         age = random.choice([True, False])
         race = random.choice([True, False])
         lifestyle = random.choice([True, False])
-        alignment = None
-        cancer = None
     
             
         pathogenic_chance = 0.35
@@ -294,25 +297,39 @@ def generate_data(benign_seqs, pathogenic_seqs, num_datapoints=1000):
             
         idx = sample[0]
         seq = sample[1]
+        clinical_sig = sample[2]
         
         row = {
                 "ID": idx,
-                "Old": age,
-                "White": race,
-                "Unhealthy": lifestyle,
-                "Align_Score": alignment,
-                "Cancer": cancer,
+                "Age": age,
+                "Race": race,
+                "Lifestyle": lifestyle,
+                "Sequence_Score": None,
+                "Align_Score": None,
+                "Disease": None,
                 "Sequence": seq,
-                "is_pathogenic": is_pathogenic}
+                "Ground": is_pathogenic}
         
         rows.append(row)
     
     df = pd.DataFrame(rows)
-    
-    df.to_csv('prion_uniprot.csv', index=False)
-    
+    return df
 
-
+def filter_unique_by_second(items):
+    seen = set()
+    result = []
+    for item in items:
+        if item[1] not in seen:
+            result.append(item)
+            seen.add(item[1])
+    return result 
+  
+def split_and_unique(df):
+    
+    benign = df[df["clinical_sig"] == False].drop_duplicates(subset="sequence")
+    disease = df[df["clinical_sig"] == True].drop_duplicates(subset="sequence")
+    
+    return benign, disease
 def brca_driver():
     
     start = 43044295
@@ -364,7 +381,9 @@ def brca_driver():
     print(len(unique_benign), len(unique_cancer))
 
     
-    generate_data(unique_benign, unique_cancer)
+    df = generate_synth(unique_benign, unique_cancer)
+    df.to_csv('brca.csv', index=False)
+    
     # print(benign, cancer)
     
     
@@ -440,7 +459,9 @@ def prion_driver():
     # print(len(unique_benign), len(unique_cancer))
 
     
-    generate_data(unique_benign, unique_cancer)
+    df = generate_synth(unique_benign, unique_cancer)
+    df.to_csv('prion_uniprot.csv', index=False)
+    
     # print(benign, cancer)
     
     

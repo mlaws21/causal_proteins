@@ -36,15 +36,14 @@ def check_job(job_id):
 
 
 
-def fold(name, seq, partition):
-    
-    name = name.replace(":", "_").replace(">", "_").lower()
+def fold(name, seq, partition, project_name, log_fn):
+
     if os.path.exists(f"/shared/25mdl4/af_output/{name}"):
-        print(f"SKIPPING: [{name}] has already been folded")
+        log_fn(f"SKIPPING: [{name}] has already been folded")
         return True
     else:
-        print(f"Folding {name}")
-    
+        log_fn(f"Folding {name}")
+
     start_time = time.time()
     # datet = datetime.now().strftime("%m.%d_%H.%M.%S")
     
@@ -69,7 +68,7 @@ def fold(name, seq, partition):
         json.dump(inp_data, json_file, indent=2)
         
     
-    run_cmd = f"./run-alpha-{partition}.sh"
+    run_cmd = f"/shared/25mdl4/thesis/alphafold_driver/run-alpha-{partition}.sh"
     
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
 
@@ -86,7 +85,8 @@ def fold(name, seq, partition):
     if check_job(job_num):
         
         end_time = time.time()
-        print(f"{name} folded successfully. in {end_time-start_time}s.")
+        with log_lock:
+            log(f"{name} folded successfully. in {end_time-start_time}s.")
         return True
     return False
         # job has finished
@@ -94,14 +94,14 @@ def fold(name, seq, partition):
         
 
 
-def fold_all(data_file, partition):
+def fold_all_from_datafile(data_file, partition, num_workers=None):
     df = pd.read_csv("prion_uniprot.csv")[::-1]
     
     
     # Example function to be executed by threads
 
-    
-    num_workers = 3 if partition == "a" else 7
+    if num_workers == None:
+        num_workers = 3 if partition == "a" else 7
 # Create a ThreadPoolExecutor with 4 threads
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
@@ -110,7 +110,23 @@ def fold_all(data_file, partition):
     # tasks = [executor.submit(worker_function, i) for i in range(10)]
 
     
+
+def fold_all(ids, seqs, partition, project_name, log_fn, num_workers=None):
+    # Example function to be executed by threads
+    
+    log_fn("Beginning Fold Routine")
+    
+    if num_workers == None:
+        num_workers = 3 if partition == "a" else 7
+    log_fn(f"Using Partition {partition} with {num_workers} workers")
+# Create a ThreadPoolExecutor with 4 threads
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
+        for row_id, row_seq in zip(ids, seqs):
+            executor.submit(fold, f"{project_name}_{row_id}", row_seq, partition, project_name, log_fn)
+    # tasks = [executor.submit(worker_function, i) for i in range(10)]
+
+     
         
 
 
@@ -150,7 +166,7 @@ def main():
     assert sys.argv[1] in ["a", "b", "b1"]
     
     
-    fold_all("data.json", sys.argv[1])
+    fold_all_from_datafile("data.json", sys.argv[1])
     
     
 if __name__ == "__main__":

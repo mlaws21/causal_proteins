@@ -143,7 +143,12 @@ def weighted_kabsch_numpy(P, Q, avg_conf):
     centroid_P = np.mean(P, axis=0)
     centroid_Q = np.mean(Q, axis=0)
 
+
+    #FIXME TODO we don't use the translation -- is this messing us up?
+    # it may be ok because we center the points
+    
     # Optimal translation
+
     t = centroid_Q - centroid_P
 
     # Center the points
@@ -163,6 +168,7 @@ def weighted_kabsch_numpy(P, Q, avg_conf):
     # Optimal rotation
     R = np.dot(Vt.T, U.T)
 
+    # TODO Should we add translation here
     alignments = np.square(np.dot(p, R.T) - q)
     # print(alignments.shape, avg_conf.shape)
 
@@ -290,6 +296,45 @@ def compute_align(name1, name2):
 # tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
 
 
+def align_all(ref_id, seq_ids, project_name, log_fn):
+    
+    out_root = "/shared/25mdl4/af_output/"
+    
+    # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,is_pathogenic
+    # ids = data["ID"]
+    
+    scores = []
+    
+    # name = name.replace(":", "_").replace(">", "_").lower()
+    
+    for i, idx in enumerate(seq_ids):
+        
+        if i % (len(seq_ids) // 10) == 0:
+            log_fn(f"{(i / len(seq_ids)) * 100:.0f}% complete")
+            
+        folder1 = os.path.join(out_root, f"{project_name}_{idx}")
+        folder2 = os.path.join(out_root, f"{project_name}_{ref_id}")
+        
+        if not os.path.isdir(folder1):
+            log_fn(f"WARNING: {name} invalid path -- skipping" )
+            continue
+        
+        cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
+        cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
+        json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
+        json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
+        align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
+        
+        if align_score is None:
+            log_fn(f"WARNING: nonsense mutation -- skipping")
+            continue
+        
+        scores.append(align_score)
+    
+    return scores
+    # updated_data = pd.DataFrame(valid_rows)
+    
+    # updated_data.to_csv("align.csv", index=False)
 
 def augment_data(reference):
     
@@ -338,9 +383,12 @@ def augment_data(reference):
     
     updated_data.to_csv("align.csv", index=False)
     
+def main():
+    augment_data("prion_ref")
     
-        
-augment_data("prion_ref")
+
+if __name__ == "__main__":
+    main()    
 
 
 # folder1 = out_root + sys.argv[1]
