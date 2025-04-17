@@ -124,6 +124,48 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
             
     return np.array(P), np.array(Q), np.array(avg_conf)
 
+def kabsch_numpy(P, Q):
+    """
+    Computes the optimal rotation and translation to align two sets of points (P -> Q),
+    and their RMSD.
+
+    :param P: A Nx3 matrix of points
+    :param Q: A Nx3 matrix of points
+    :return: A tuple containing the optimal rotation matrix, the optimal
+             translation vector, and the RMSD.
+    """
+    
+    # print(P.shape, Q.shape)
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+
+    # Optimal translation
+    t = centroid_Q - centroid_P
+
+    # Center the points
+    p = P - centroid_P
+    q = Q - centroid_Q
+
+    # Compute the covariance matrix
+    H = np.dot(p.T, q)
+
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+
+    # Validate right-handed coordinate system
+    if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
+        Vt[-1, :] *= -1.0
+
+    # Optimal rotation
+    R = np.dot(Vt.T, U.T)
+
+    # RMSD
+    rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
+
+    return R, t, rmsd
 
 def weighted_kabsch_numpy(P, Q, avg_conf):
     """
@@ -191,7 +233,10 @@ def tm_align_rmsd(protein1, protein2, json1, json2, thresh=70.0):
     if res is None: 
         return None
     P, Q, avg_conf = res
+    #FINDME CHanged
     rmsd1 = weighted_kabsch_numpy(P, Q, avg_conf)
+    # rmsd1 = kabsch_numpy(P, Q, avg_conf)
+    
     
     return rmsd1[2]
     # Calculate TM-align based RMSD

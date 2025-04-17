@@ -21,8 +21,7 @@ from sequence_adjust.blosum import blosum_scores
 from alphafold_driver.alt_align import align_all
 from datetime import datetime
 import argparse
-
-
+from cont_treatment.mono import generate_dr_curve
 
 
 log_lock = threading.Lock()
@@ -159,16 +158,11 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     patient_data["Align_Score"] = np_alignments
     
     log("Calculating Disease Column")
-        
-    logit = (
-        coeffs["Intercept"]
-        + coeffs["Age"] * patient_data["Age"]
-        + coeffs["Race"] * patient_data["Race"]
-        + coeffs["Lifestyle"] * patient_data["Lifestyle"]
-        + coeffs["Sequence_Score"] * patient_data["Sequence_Score"]
-        + coeffs["Align_Score"] * patient_data["Align_Score"]
-        
-    )
+    
+    numerical_cols = list(coeffs.keys())
+    numerical_cols.remove("Intercept")
+    
+    logit = coeffs["Intercept"] + sum([coeffs[x] * patient_data[x] for x in numerical_cols])
     
     # print(logit)
     prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
@@ -180,6 +174,16 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     
     # Now we generate the dose response curve
     
+    numerical_cols.append("Disease")
+    
+    numerical_data = patient_data[numerical_cols]
+    
+    numerical_data = numerical_data.head(100)
+
+    
+    generate_dr_curve(numerical_data, project_name, coeffs, log)
+    
+    log("Data Generation Complete")
 
 
 def main():
