@@ -25,7 +25,7 @@ def calc_effect(intervention_data_filename, full_data_filename="final_full.csv",
     
     intervention_data = pd.read_csv(intervention_data_filename)
 
-    with open(spline_filename, "rb") as f:
+    with open(f"pickles/{spline_filename}", "rb") as f:
         x_loaded, y_loaded = pickle.load(f)
 
     # Reconstruct the interpolator

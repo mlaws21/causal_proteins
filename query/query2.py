@@ -43,17 +43,17 @@ def check_job(job_id):
     
         time.sleep(5)
         
-def fold(name, seq, partition, project_name, log_fn):
+def fold(name, seq, partition, protein_name, log_fn):
 
-    if name == f"{project_name}_":
-        name = f"{project_name}_ref"
+    if name == f"{protein_name}_":
+        name = f"{protein_name}_ref"
     
     muts = name.split("_")[1:]
     perms = list(itertools.permutations(muts))
     
     
     for p in perms:
-        new_name = f"{project_name}_{'_'.join(p)}"
+        new_name = f"{protein_name}_{'_'.join(p)}"
         if os.path.exists(f"/shared/25mdl4/af_output/{new_name}"):
             log_fn(f"SKIPPING: [{new_name}] has already been folded")
             return new_name
@@ -113,7 +113,7 @@ def fold(name, seq, partition, project_name, log_fn):
         # job has finished
         # read the output and then do the comparison
         
-def compute_align(ref_id, seq_id, project_name, log_fn):
+def compute_align(ref_id, seq_id, protein_name, log_fn):
     
     out_root = "/shared/25mdl4/af_output/"
     
@@ -145,19 +145,19 @@ def compute_align(ref_id, seq_id, project_name, log_fn):
     return align_score
     
     
-def fold_with_wo_and_score(with_data, wo_data, project_name, partition, log_fn):
+def fold_with_wo_and_score(with_data, wo_data, protein_name, partition, log_fn):
     # presumably either prev or post should already be folded so we can use 1 thread for this
     
     
-    with_fold = fold(f"{project_name}_{with_data[0]}", with_data[1], partition, project_name, log_fn)
-    wo_fold = fold(f"{project_name}_{wo_data[0]}", wo_data[1], partition, project_name, log_fn)
+    with_fold = fold(f"{protein_name}_{with_data[0]}", with_data[1], partition, protein_name, log_fn)
+    wo_fold = fold(f"{protein_name}_{wo_data[0]}", wo_data[1], partition, protein_name, log_fn)
     
     assert with_fold is not None
     assert wo_fold is not None
     
-    ref_name = f"{project_name}_ref"
-    with_align = compute_align(ref_name, with_fold, project_name, log_fn)
-    wo_align = compute_align(ref_name, wo_fold, project_name, log_fn)
+    ref_name = f"{protein_name}_ref"
+    with_align = compute_align(ref_name, with_fold, protein_name, log_fn)
+    wo_align = compute_align(ref_name, wo_fold, protein_name, log_fn)
     
     # align_score = with_align - wo_align
     
@@ -216,7 +216,7 @@ def match_mut_location(new_muts, germline):
                 break
     return matches
 
-def query(mut_data, data, ref_seq, num_individuals, partition, project_name, log_fn):
+def query(mut_data, data, ref_seq, num_individuals, partition, project_name, protein_name, log_fn):
     # mut_data is mut_data.ID, mut_data.Ground
     mutation = mut_data.ID
     
@@ -295,7 +295,7 @@ def query(mut_data, data, ref_seq, num_individuals, partition, project_name, log
         # print("------------------")
         
         # TODO: right now we are gonna hang here -- need to parallelize
-        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, project_name, partition, log_fn)
+        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, protein_name, partition, log_fn)
         
         # in loop to see progress
         
@@ -333,7 +333,7 @@ def thread(mut, data, ref_seq, partition, subset, log_fn):
 
          
         
-def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, log_fn, partition, num_workers=None):
+def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, log_fn, partition, num_workers=None):
     data = pd.read_csv(data_filename)
 
     all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
@@ -347,7 +347,7 @@ def process_mutations(data_filename, spline_filename, ref_seq, subset, project_n
         #     executor.submit(thread, mut, partition)
         # # print(mut)
         
-        futures = [executor.submit(query, mut, data, ref_seq, subset, partition, project_name, log_fn) for mut in all_mutations.itertuples(index=False)]
+        futures = [executor.submit(query, mut, data, ref_seq, subset, partition, project_name, protein_name, log_fn) for mut in all_mutations.itertuples(index=False)]
         
         # Wait for all futures to complete
         for future in futures:

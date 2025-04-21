@@ -24,9 +24,10 @@ from query.predict import process_files
 from datetime import datetime
 import argparse
 from cont_treatment.mono import generate_dr_curve
+from query.display import display
 
 PARTITION = 'b'
-GPUS = 16
+GPUS = 8
 log_lock = threading.Lock()
 
 
@@ -182,8 +183,9 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     numerical_cols.append("Disease")
     
     numerical_data = patient_data[numerical_cols]
-    
-    generate_dr_curve(numerical_data, project_name, coeffs, log)
+    treatment = "Align_Score"
+    outcome = "Disease"
+    generate_dr_curve(numerical_data, project_name, coeffs, log, treatment, outcome)
     
     log("Data Generation Complete")
 
@@ -201,12 +203,15 @@ def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name,
 
     log(datetime.now())
     
+    os.makedirs(f"intervention_data/{project_name}", exist_ok=True)
+    
     if ref_sequence.endswith(".txt"):
         with open(ref_sequence, 'r') as file:
             ref_sequence = file.readline().strip()
             
-    process_mutations(data_csv, spline_pkl, ref_sequence, subset, protein_name, log, PARTITION, num_workers=GPUS)
-
+    process_mutations(data_csv, spline_pkl, ref_sequence, subset, project_name, protein_name, log, PARTITION, num_workers=GPUS)
+    log("Analysis Complete")
+    
 def calculate_effect(project_name):
     
     with open(f"{project_name}_effect.log", "w"):
@@ -221,6 +226,10 @@ def calculate_effect(project_name):
     log(datetime.now())
     
     process_files(project_name, log)
+    
+    display(project_name, log)
+    log("Effect Calculation Complete")
+    
     
 def main():
     # NOTE can add defaults
@@ -255,8 +264,8 @@ def main():
             analyze_data(f"{args.project}_data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project, args.protein)
             
         elif response == '3':
-            calculate_effect(args.project)
             print(f"Calculating Effects and Logging Output to {args.project}_effect.log")
+            calculate_effect(args.project)
         elif response == '4':
             print("HELP MESSAGE")
         elif response == '5':
