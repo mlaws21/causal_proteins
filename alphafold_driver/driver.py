@@ -36,7 +36,7 @@ def check_job(job_id):
 
 
 
-def fold(name, seq, partition, project_name, log_fn):
+def fold(name, seq, partition, log_fn):
 
     if os.path.exists(f"/shared/25mdl4/af_output/{name}"):
         log_fn(f"SKIPPING: [{name}] has already been folded")
@@ -123,7 +123,7 @@ def fold_all(ids, seqs, partition, project_name, log_fn, num_workers=None):
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
         for row_id, row_seq in zip(ids, seqs):
-            executor.submit(fold, f"{project_name}_{row_id}", row_seq, partition, project_name, log_fn)
+            executor.submit(fold, f"{project_name}_{row_id}", row_seq, partition, log_fn)
     # tasks = [executor.submit(worker_function, i) for i in range(10)]
 
      

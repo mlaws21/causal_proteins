@@ -7,10 +7,7 @@ import os
 from tqdm import tqdm
 import pandas as pd
 
-# NOTE THIS IS A DIRECT COPY PASTE OF alt_align.py in alphafold_driver
-# One day this should just be the same file that they both reference
-# but that day is not today
-
+# TODO weighted avg
 
 def get_atom_coords_by_residue_from_cif(cif_file):
     """Extracts the coordinates of all atoms, grouped by residue, from a .cif file."""
@@ -127,48 +124,6 @@ def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
             
     return np.array(P), np.array(Q), np.array(avg_conf)
 
-def kabsch_numpy(P, Q):
-    """
-    Computes the optimal rotation and translation to align two sets of points (P -> Q),
-    and their RMSD.
-
-    :param P: A Nx3 matrix of points
-    :param Q: A Nx3 matrix of points
-    :return: A tuple containing the optimal rotation matrix, the optimal
-             translation vector, and the RMSD.
-    """
-    
-    # print(P.shape, Q.shape)
-    assert P.shape == Q.shape, "Matrix dimensions must match"
-
-    # Compute centroids
-    centroid_P = np.mean(P, axis=0)
-    centroid_Q = np.mean(Q, axis=0)
-
-    # Optimal translation
-    t = centroid_Q - centroid_P
-
-    # Center the points
-    p = P - centroid_P
-    q = Q - centroid_Q
-
-    # Compute the covariance matrix
-    H = np.dot(p.T, q)
-
-    # SVD
-    U, S, Vt = np.linalg.svd(H)
-
-    # Validate right-handed coordinate system
-    if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
-        Vt[-1, :] *= -1.0
-
-    # Optimal rotation
-    R = np.dot(Vt.T, U.T)
-
-    # RMSD
-    rmsd = np.sqrt(np.sum(np.square(np.dot(p, R.T) - q)) / P.shape[0])
-
-    return R, t, rmsd
 
 def weighted_kabsch_numpy(P, Q, avg_conf):
     """
@@ -188,12 +143,7 @@ def weighted_kabsch_numpy(P, Q, avg_conf):
     centroid_P = np.mean(P, axis=0)
     centroid_Q = np.mean(Q, axis=0)
 
-
-    #FIXME TODO we don't use the translation -- is this messing us up?
-    # it may be ok because we center the points
-    
     # Optimal translation
-
     t = centroid_Q - centroid_P
 
     # Center the points
@@ -213,7 +163,6 @@ def weighted_kabsch_numpy(P, Q, avg_conf):
     # Optimal rotation
     R = np.dot(Vt.T, U.T)
 
-    # TODO Should we add translation here
     alignments = np.square(np.dot(p, R.T) - q)
     # print(alignments.shape, avg_conf.shape)
 
@@ -236,10 +185,7 @@ def tm_align_rmsd(protein1, protein2, json1, json2, thresh=70.0):
     if res is None: 
         return None
     P, Q, avg_conf = res
-    #FINDME CHanged
     rmsd1 = weighted_kabsch_numpy(P, Q, avg_conf)
-    # rmsd1 = kabsch_numpy(P, Q, avg_conf)
-    
     
     return rmsd1[2]
     # Calculate TM-align based RMSD
@@ -344,45 +290,6 @@ def compute_align(name1, name2):
 # tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
 
 
-def align_all(ref_id, seq_ids, project_name, log_fn):
-    
-    out_root = "/shared/25mdl4/af_output/"
-    
-    # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,is_pathogenic
-    # ids = data["ID"]
-    
-    scores = []
-    
-    # name = name.replace(":", "_").replace(">", "_").lower()
-    
-    for i, idx in enumerate(seq_ids):
-        
-        if i % (len(seq_ids) // 10) == 0:
-            log_fn(f"{(i / len(seq_ids)) * 100:.0f}% complete")
-            
-        folder1 = os.path.join(out_root, f"{project_name}_{idx}")
-        folder2 = os.path.join(out_root, f"{project_name}_{ref_id}")
-        
-        if not os.path.isdir(folder1):
-            log_fn(f"WARNING: {name} invalid path -- skipping" )
-            continue
-        
-        cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
-        cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
-        json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
-        json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
-        align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
-        
-        if align_score is None:
-            log_fn(f"WARNING: nonsense mutation -- skipping")
-            continue
-        
-        scores.append(align_score)
-    
-    return scores
-    # updated_data = pd.DataFrame(valid_rows)
-    
-    # updated_data.to_csv("align.csv", index=False)
 
 def augment_data(reference):
     
@@ -431,12 +338,9 @@ def augment_data(reference):
     
     updated_data.to_csv("align.csv", index=False)
     
-def main():
-    augment_data("prion_ref")
     
-
-if __name__ == "__main__":
-    main()    
+        
+# augment_data("prion_ref")
 
 
 # folder1 = out_root + sys.argv[1]

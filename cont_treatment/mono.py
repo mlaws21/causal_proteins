@@ -6,7 +6,7 @@ import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import pickle
-from scipy.optimize import linprog
+from scipy.optimize import linprog, curve_fit
 import cvxpy as cp
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.stats import norm
@@ -116,14 +116,17 @@ def get_points(data, treatment, outcome, log_fn=print):
     ij_df = ij_df.astype(data.dtypes)
     
     log_fn("Generating Giant Dataframe for Vectorization")
+    # go through all rows
     for i, rowi in data.iterrows():
         if i % (len(data) // 10) == 0:
             log_fn(f"{(i / len(data)) * 100:.0f}% complete")
-            
+        
+        # go through all rows
         for _, rowj in data.iterrows():
             
             cp = rowj.copy()
             cp[treatment] = rowi[treatment]
+            # we make lots of new rows where 
             ij_df = pd.concat([ij_df, pd.DataFrame([cp])], ignore_index=True)
 
     # NOTE: can enforce uniqueness if needed -- but shouldnt need to bc continuous
@@ -308,6 +311,36 @@ def verify_spline_convex(spline, data, treatment):
     
     plt.clf()
 
+
+def exp_func(x, a, b):
+    return a * np.exp(b * x)
+
+def exp_deriv(x, a, b):
+    return a * b * np.exp(b * x)
+    
+def fit_exponential(xlist, ylist):
+    """
+    Fits an exponential curve y = a * exp(b * x) to the data.
+    
+    Parameters:
+        xlist (list or np.ndarray): The x values.
+        ylist (list or np.ndarray): The y values.
+    
+    Returns:
+        a, b (float): Parameters for the best fit y = a * exp(b * x)
+    """
+
+    # Define the exponential model
+
+    
+    # Convert input to numpy arrays
+    x = np.array(xlist)
+    y = np.array(ylist)
+
+    # Fit the curve
+    params, _ = curve_fit(exp_func, x, y, p0=(1.0, 0.1))  # initial guess a=1, b=0.1
+    return params[0], params[1]
+
 #TODO Make sure the spline is convex -- but pretty close
 
 def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, treatment="Align_Score", outcome="Disease"):
@@ -315,8 +348,8 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     dr_pkl = f"pickles/{project_name}_spline.pkl"
     
     # TODO FIXME
-    # if os.path.exists(dr_pkl):
-    if False:
+    if os.path.exists(dr_pkl):
+    # if False:
         log_fn(f"Reading in Dose Response Curve from {dr_pkl}")
         
         with open(dr_pkl, "rb") as f:
@@ -336,12 +369,20 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
             pickle.dump((xlist, ylist), f)
             
     log_fn("Building Spline")
-    cubic_spline = build_cubic_spline(xlist, ylist)
     
+    # a, b = fit_exponential(xlist, ylist)
+    # print(f"Fitted: y = {a:.4f} * exp({b:.4f} * x)")
+    
+    cubic_spline = build_cubic_spline(xlist, ylist)
+    # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
+    # print(exp_ys)
     dr_graph_file = f"{project_name}_dr_curve.png"
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
     plt.plot(np.arange(0, 10.5, 0.5), [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in np.arange(0, 10.5, 0.5)] , color='red', label="Estimate", marker='x')
     plt.plot(np.arange(0, 10.5, 0.5), [compute_ground_truth(patient_numerical_data, i, treatment, outcome, coeffs) for i in np.arange(0, 10.5, 0.5)], color='blue', label="Ground", marker='o')
+    # plt.plot(np.arange(0, 10.5, 0.5), [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)], color='green', label="Exp", marker='+')
+    # plt.plot(np.arange(0, 10.5, 0.5), exp_ys, color='green', label="Exp", marker='+')
+    
     # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
     plt.xlabel("Alignment Score (Å)")
@@ -360,6 +401,8 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     
     plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
     plt.scatter(xlist, ylist, color='blue', label='Points')
+    # plt.plot(np.arange(0, 1.0001, 0.001), [exp_func(x, a, b) for x in np.arange(0, 1.0001, 0.001)], color='red', label="Exp", marker='+')
+    
 
     # Add labels and title
     plt.xlabel("F(Align Score)") # where F is the continous emperical distribution

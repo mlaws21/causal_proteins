@@ -19,19 +19,23 @@ from alphafold_driver.driver import fold_all
 from sequence_adjust.proteinbert import protein_bert_scores
 from sequence_adjust.blosum import blosum_scores
 from alphafold_driver.alt_align import align_all
+from query.query2 import process_mutations
+from query.predict import process_files
 from datetime import datetime
 import argparse
 from cont_treatment.mono import generate_dr_curve
 
-
+PARTITION = 'b'
+GPUS = 16
 log_lock = threading.Lock()
+
 
 def normalize(nums):
     return (nums - np.mean(nums)) / np.std(nums)
 # before this need to create this list
 # note need to ensure ids are filename safe
 # name = name.replace(":", "_").replace(">", "_").lower()
-def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], list[str], list[bool]], sequence_score_method, project_name: str, coeffs, protein_length=253, num_datapoints=1000):
+def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], list[str], list[bool]], sequence_score_method, project_name: str, protein_name: str, coeffs, protein_length=253, num_datapoints=1000):
     '''
     TODO
 
@@ -42,6 +46,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
       sequences, and significance (disease=True) directly.
     - sequence_score_method (str): ["proteinbert", "blosum"] or default to none
     - project_name (str)
+    - protein_name (str)
     - coeffs
     - protein_length (int)
     - num_datapoints (int, default: 1000): number of datapoints to generate
@@ -134,7 +139,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     normalized_scores = 0 if np.std(np_scores) == 0 else normalize(np_scores)
     patient_data["Sequence_Score"] = normalized_scores
     
-    fold_all(patient_data["ID"], patient_data["Sequence"], "b", project_name, log, num_workers=7)
+    fold_all(patient_data["ID"], patient_data["Sequence"], PARTITION, protein_name, log, num_workers=GPUS)
     
     align_pkl = f"pickles/{project_name}_alignments.pkl"
     if os.path.exists(align_pkl):
@@ -145,7 +150,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
         
     else:
         log("Aligning all proteins")
-        alignments = align_all("ref", patient_data["ID"], project_name, log)
+        alignments = align_all("ref", patient_data["ID"], protein_name, log)
         with open(align_pkl, "wb") as f:
             pickle.dump(alignments, f)
         log(f"Aligned {len(alignments)} proteins")
@@ -170,7 +175,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
 
     log(f"Mean of Probability of Disease: {np.mean(patient_data['Disease'])}")
     
-    patient_data.to_csv(f'{project_name}_cov_data.csv', index=False)
+    patient_data.to_csv(f'{project_name}_data.csv', index=False)
     
     # Now we generate the dose response curve
     
@@ -178,27 +183,98 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     
     numerical_data = patient_data[numerical_cols]
     
-    numerical_data = numerical_data.head(100)
-
-    
     generate_dr_curve(numerical_data, project_name, coeffs, log)
     
     log("Data Generation Complete")
 
 
+def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, subset=100):
+    
+    with open(f"{project_name}_analysis.log", "w"):
+        pass
+    
+    
+    def log(tolog):
+        with log_lock:
+            with open(f"{project_name}_analysis.log", "a") as log_file:
+                print(tolog, file=log_file)
+
+    log(datetime.now())
+    
+    if ref_sequence.endswith(".txt"):
+        with open(ref_sequence, 'r') as file:
+            ref_sequence = file.readline().strip()
+            
+    process_mutations(data_csv, spline_pkl, ref_sequence, subset, protein_name, log, PARTITION, num_workers=GPUS)
+
+def calculate_effect(project_name):
+    
+    with open(f"{project_name}_effect.log", "w"):
+        pass
+    
+    
+    def log(tolog):
+        with log_lock:
+            with open(f"{project_name}_effect.log", "a") as log_file:
+                print(tolog, file=log_file)
+    
+    log(datetime.now())
+    
+    process_files(project_name, log)
+    
 def main():
+    # NOTE can add defaults
     parser = argparse.ArgumentParser(description="Generate prion data with given coefficients.")
-    parser.add_argument("--project", default="prion411", help="Name of the project")
-    parser.add_argument("--ref", default="prion_ref.txt", help="Reference file")
-    parser.add_argument("--input", default="prion_input.csv", help="Input file")
-    parser.add_argument("--metric", default="blosum", help="Score type (e.g., blosum)")
+    parser.add_argument("--project", help="Name of the project")
+    parser.add_argument("--protein", help="Name of Protein")
+    parser.add_argument("--ref", help="Reference file")
+    parser.add_argument("--input", help="Input file")
+    parser.add_argument("--metric", help="Score type (e.g., blosum)")
 
     args = parser.parse_args()
+    
+    coeffs = {"Intercept": -1.75, "Age": 0.5, "Race": 0.1, "Lifestyle": 0.3, "Sequence_Score": 0.7, "Align_Score": 0.8}
+    
+    response = ""
+    
+    while True:
+        print(f"Welcome to Project [{args.project}]! Would you like to:")
+        print("- Generate Data [1]")
+        print("- Analyze Data [2]")
+        print("- Calculate Effect [3]")
+        print("- Help [4]")
+        print("- quit [5]")
+        response = input("> ")
+        
+        if response == '1':
+            print(f"Generating Data Effects and Logging Output to {args.project}_generate.log")
+            generate_data(args.ref, args.input, args.metric, args.project, args.protein, coeffs)
+            
+        elif response == '2':
+            print(f"Analyzing Data and Logging Output to {args.project}_analysis.log")
+            analyze_data(f"{args.project}_data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project, args.protein)
+            
+        elif response == '3':
+            calculate_effect(args.project)
+            print(f"Calculating Effects and Logging Output to {args.project}_effect.log")
+        elif response == '4':
+            print("HELP MESSAGE")
+        elif response == '5':
+            print(f"Exiting Project [{args.project}]")
+            exit(0)
+        else:
+            print("Invalid Request: please enter a number 1-5")
+        
+    
 
-    coeffs = {"Intercept": -3, "Age": 0.5, "Race": 0.1, "Lifestyle": 0.3, "Sequence_Score": 0.7, "Align_Score": 0.8}
+    print(response)
+        
 
-    generate_data(args.ref, args.input, args.metric, args.project, coeffs)
-
+    # generate_data(args.ref, args.input, args.metric, args.project, coeffs)
+    
+    
+    # analyze_data(f"{args.project}_data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project)
+    
 
 if __name__ == "__main__":
     main()

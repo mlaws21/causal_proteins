@@ -4,6 +4,7 @@ import pickle
 import sys
 from scipy.interpolate import PchipInterpolator
 import matplotlib.pyplot as plt
+import glob
 
 
 
@@ -101,7 +102,28 @@ def calc_point_and_conf(intervention_data_filename, full_data_filename, spline_f
     
     return f"Causal Effect: {(with_point - wo_point):.4f} ({np.quantile(boots_stuff, 0.025):.4f}, {np.quantile(boots_stuff, 0.975):.4f})"
     
+
+# Define the function to process each file
+def process_files(project_name, log_fn):
     
+    regex = f"intervention_data/{project_name}/post_treatment*.csv"
+    
+    # Find all CSV files matching the pattern
+    csv_files = glob.glob(regex) # "post_treatment*.csv"
+
+    for filename in csv_files:
+        # Assuming `mut` and `spline_filename` are defined somewhere
+        
+        spl = filename.split("_")
+        
+        significance = spl[-1][:-4]
+        mutation = "_".join(spl[2:-1])
+        
+        log_fn(f"{mutation} [{'Benign' if significance == 'b' else 'Pathogenic' if significance == 'p' else 'Unknown'}]: {calc_point_and_conf(filename, f'{project_name}_data.csv', f'{project_name}_spline.pkl')}")
+
+# Call the function
+# process_files()
+   
      
 
 def main():

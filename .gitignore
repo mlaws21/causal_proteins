@@ -17,4 +17,4 @@
 old/*
 *pycache*
 sequence_adjust/protein_bert_helper
-.log
+*.log

@@ -7,12 +7,14 @@ import json
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+import itertools
 
 
 
-from mutgen import generate_brca_mutations, generate_prion_mutation
-from alt_align import compute_align
-from predict import calc_point_and_conf
+# from mutgen import generate_brca_mutations, generate_prion_mutation
+# FIXME this is direct pathing call from main
+from alphafold_driver.alt_align import tm_align_rmsd
+# from predict import calc_point_and_conf
 
 
 # - mutation should be in XNY form 
@@ -41,19 +43,23 @@ def check_job(job_id):
     
         time.sleep(5)
         
-def fold(name, seq, partition):
+def fold(name, seq, partition, project_name, log_fn):
+
+    if name == f"{project_name}_":
+        name = f"{project_name}_ref"
     
-    if name == "":
-        name = "prion_ref"
-        
-        
-    name = name.replace(":", "_").replace(">", "_").replace(",", "-").lower()
-    if os.path.exists(f"/shared/25mdl4/af_output/{name}"):
-        print(f"SKIPPING: [{name}] has already been folded")
-        return name
+    muts = name.split("_")[1:]
+    perms = list(itertools.permutations(muts))
+    
+    
+    for p in perms:
+        new_name = f"{project_name}_{'_'.join(p)}"
+        if os.path.exists(f"/shared/25mdl4/af_output/{new_name}"):
+            log_fn(f"SKIPPING: [{new_name}] has already been folded")
+            return new_name
     else:
-        print(f"Folding {name}")
-    
+        log_fn(f"Folding {name}")
+
     start_time = time.time()
     # datet = datetime.now().strftime("%m.%d_%H.%M.%S")
     
@@ -78,41 +84,80 @@ def fold(name, seq, partition):
         json.dump(inp_data, json_file, indent=2)
         
     
-    run_cmd = f"./run-alpha-{partition}.sh"
+    run_cmd = f"/shared/25mdl4/thesis/alphafold_driver/run-alpha-{partition}.sh"
     
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
 
     
     # print("Script Output:", result.stdout)
-    # print("Script Errors:", result.stderr)
+    if result.stderr:
+        log_fn(f"Slurm Errors: {result.stderr}")
     # print("Return Code:", result.returncode)
     
-    
-    job_num = result.stdout.strip().split()[-1]
+    try:
+        job_num = result.stdout.strip().split()[-1]
+    except Exception as e:
+        print(job_num)
+        print(name)
+        exit(1)
     # print(job_num)
     
     
     if check_job(job_num):
         
         end_time = time.time()
-        print(f"{name} folded successfully. in {end_time-start_time}s.")
+        with log_lock:
+            log(f"{name} folded successfully. in {end_time-start_time}s.")
         return name
-    return None
+    return "BAD"
         # job has finished
         # read the output and then do the comparison
+        
+def compute_align(ref_id, seq_id, project_name, log_fn):
     
-def fold_with_wo_and_score(with_data, wo_data, partition):
+    out_root = "/shared/25mdl4/af_output/"
+    
+    # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,Ground
+    # ids = data["ID"]
+    
+
+    
+    # name = name.replace(":", "_").replace(">", "_").lower()
+    
+
+    folder1 = os.path.join(out_root, f"{seq_id}")
+    folder2 = os.path.join(out_root, f"{ref_id}")
+    
+    if not os.path.isdir(folder1):
+        log_fn(f"WARNING: {seq_id} invalid path -- skipping" )
+        return None
+        
+    cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
+    cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
+    json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
+    json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
+    align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
+    
+    if align_score is None:
+        log_fn(f"WARNING: nonsense mutation -- skipping")
+        return None
+    
+    return align_score
+    
+    
+def fold_with_wo_and_score(with_data, wo_data, project_name, partition, log_fn):
     # presumably either prev or post should already be folded so we can use 1 thread for this
     
-    with_fold = fold(with_data[0], with_data[1], partition)
-    wo_fold = fold(wo_data[0], wo_data[1], partition)
+    
+    with_fold = fold(f"{project_name}_{with_data[0]}", with_data[1], partition, project_name, log_fn)
+    wo_fold = fold(f"{project_name}_{wo_data[0]}", wo_data[1], partition, project_name, log_fn)
     
     assert with_fold is not None
     assert wo_fold is not None
     
-    # FIXME make dynamic
-    with_align = compute_align("prion_ref", with_fold)
-    wo_align = compute_align("prion_ref", wo_fold)
+    ref_name = f"{project_name}_ref"
+    with_align = compute_align(ref_name, with_fold, project_name, log_fn)
+    wo_align = compute_align(ref_name, wo_fold, project_name, log_fn)
     
     # align_score = with_align - wo_align
     
@@ -125,43 +170,123 @@ def fold_with_wo_and_score(with_data, wo_data, partition):
     
     
     
+def mutate_protein(ref, mutations, log_fn):
+    # mutations should be a list of XNX format mutations
+    # you can also give mutation groups which are XNX mutations 
+    # separate by "_": XNX_XNX...
+    # stop codon is denoted "-"
+    
+    ref = ref.lower()
+    
+    for mut in mutations:
+        
+        outchar = mut[0]
+        inchar = mut[-1]
+
+        position = int(mut[1:-1])
+        # Char doesnt match
+        # assert ref[position-1] == outchar
+        if ref[position-1] != outchar:
+            log_fn("ERROR")
+            log_fn(mut)
+            log_fn(mutations)
+            log_fn(position)
+            log_fn(f"{ref[position-1]},{outchar}")
+            exit(1)
+        
+        # this is a truncation
+        if inchar == "-":
+            ref = ref[:position-1] 
+        else:
+            ref = ref[:position-1] + inchar + ref[position:]
     
 
-        
-def query(mut_data, data, mutation_generator, num_individuals=100, partition="b"):
+    return ref.upper()
+
+def match_mut_location(new_muts, germline):
     
+    matches = set()
+    for nmut in new_muts:
+        nmut_loc = nmut[1:-1]
+    
+        for i in germline:
+            germ_mut_loc = i[1:-1]
+            if nmut_loc == germ_mut_loc:
+                matches.add(i)
+                break
+    return matches
+
+def query(mut_data, data, ref_seq, num_individuals, partition, project_name, log_fn):
+    # mut_data is mut_data.ID, mut_data.Ground
     mutation = mut_data.ID
     
+
+    # we take a random sample to make shit faster
     if num_individuals > len(data):
         print(f"Not Enough data for sample size {num_individuals}")
         exit(1)
     
+    # this is the full data
     population = data.sample(n=num_individuals, replace=False, random_state=2)
-    
-    # population.to_csv(f'pre_treatment_{mutation.replace(":", "_").replace(">", "_")}.csv', index=False)
     
     post_treatment = []
     
+    if mutation == "ref":
+        new_mutations = set()
+    else:
+        new_mutations = set(mutation.split("_"))
     for index, row in population.iterrows():
+
+        # TODO if the new mutation is in the same location --> overwrite the old one
         
-        individual_muts = row["ID"].split(",")
-        germline = row["ID"]
+        # we want to check if the induced mutation is equal to the old mutation
+
+        # individual_muts = set(row["ID"].split("_")
         
-        if mutation in individual_muts:
-            with_mut = germline
-            individual_muts.remove(mutation) 
-            wo_mut = "_".join(individual_muts)
-            # uninduce mutation
+        if row["ID"] == "ref":
+            germline = set()
         else:
+            germline = set(row["ID"].split("_"))
+        
+        
+        if new_mutations.issubset(germline):
+            with_mut = germline
+            wo_mut = germline.difference(new_mutations)
+        else:
+            position_matches = match_mut_location(new_mutations, germline)
+            temp_with = germline.difference(position_matches)
+            with_mut = temp_with.union(new_mutations)
             wo_mut = germline
-            individual_muts.append(mutation)
-            # FIXME: this is _ for prion (xnx) or , for BRCA (hgvs)
-            with_mut = "_".join(individual_muts)
-            # induce mutation
+            
+            
+        # print(with_mut, wo_mut)
+        
+        # for nmut in new_mutations:
+        #     if nmut in individual_muts:
+        #         with_mut = set(germline)
+        #         individual_muts.remove(nmut) 
+        #         wo_mut = set(individual_muts)
+        #         # uninduce mutation
+        #     elif len((matches := match_mut_location(nmut, germline))) == 0:
+        #         wo_mut = set(germline)
+        #         individual_muts.append(nmut)
+        #         for i in matches:
+        #             individual_muts.remove(i) 
+        #         with_mut = set(individual_muts)    
+                
+        #     else:
+        #         wo_mut = set(germline)
+        #         individual_muts.append(nmut)
+        #         # FIXME: this is _ for prion (xnx) or , for BRCA (hgvs)
+        #         with_mut = set(individual_muts)
+        #         # induce mutation
         
         # print(wo_mut, with_mut)
-        with_data = mutation_generator([with_mut], [row["is_pathogenic"]])[0]
-        wo_data = mutation_generator([wo_mut], [row["is_pathogenic"]])[0]
+        with_data = ("_".join(with_mut), mutate_protein(ref_seq, with_mut, log_fn))
+        wo_data = ("_".join(wo_mut), mutate_protein(ref_seq, wo_mut, log_fn))
+        
+        # with_data = mutation_generator([with_mut], [row["Ground"]])[0]
+        # wo_data = mutation_generator([wo_mut], [row["Ground"]])[0]
         
         
         
@@ -170,53 +295,59 @@ def query(mut_data, data, mutation_generator, num_individuals=100, partition="b"
         # print("------------------")
         
         # TODO: right now we are gonna hang here -- need to parallelize
-        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, partition)
+        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, project_name, partition, log_fn)
         
         # in loop to see progress
         
         new_row = {
-            "Old": row["Old"],
-            "White": row["White"],
-            "Unhealthy": row["Unhealthy"],
+            "Age": row["Age"],
+            "Race": row["Race"],
+            "Lifestyle": row["Lifestyle"],
+            "Sequence_Score": row["Sequence_Score"],
             "Align_Score_do_mut": with_align,
             "Align_Score_do_no_mut": wo_align,
-            "Ground": row["is_pathogenic"],
+            "Ground": row["Ground"],
         
         }
         
         post_treatment.append(new_row)
         
         post_treatment_df = pd.DataFrame(post_treatment)
-        # post_treatment_df.to_csv(f'post_treatment_{mutation.replace(":", "_").replace(">", "_")}_{"p" if mut_data.is_pathogenic else "b"}.csv', index=False)
-        post_treatment_df.to_csv(f'post_treatment_{mutation}_{"p" if mut_data.is_pathogenic else "b"}.csv', index=False)
+        pt_filename = f'intervention_data/{project_name}/post_treatment_{mutation}_{"p" if mut_data.Ground else "b"}.csv'
+        
+        log_fn(f"Post Treatment Data Created and saved to {pt_filename}")
+        # post_treatment_df.to_csv(f'post_treatment_{mutation.replace(":", "_").replace(">", "_")}_{"p" if mut_data.Ground else "b"}.csv', index=False)
+        post_treatment_df.to_csv(pt_filename, index=False)
+        
+        # return post_treatment_df
         
 
-def thread(mut, data, partition):
+def thread(mut, data, ref_seq, partition, subset, log_fn):
     
-    query(mut, data, generate_prion_mutation, partition=partition)
+    query(mut, data, ref_seq, subset, partition=partition)
     
-    filename = f'post_treatment_{mut.ID}_{"p" if mut_data.is_pathogenic else "b"}.csv'
-    
+    filename = f'post_treatment_{mut.ID}_{"p" if mut_data.Ground else "b"}.csv'
+    # log_fn(f'Saved data to post_treatment_{mut.ID}_{"p" if mut_data.Ground else "b"}.csv')
     # with open("prion_output.txt", "a") as file:
-    #     print(f'{mut} [{mut.is_pathogenic}]: {calc_point_and_conf(filename, spline_filename)}', file=file)
+    #     print(f'{mut} [{mut.Ground}]: {calc_point_and_conf(filename, spline_filename)}', file=file)
 
          
         
-def process_mutations(data_filename, spline_filename, partition="b"):
+def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, log_fn, partition, num_workers=None):
     data = pd.read_csv(data_filename)
 
-    all_mutations = data[['ID', 'is_pathogenic']].drop_duplicates(subset=['ID'])
+    all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
     
-    # print(sum(all_mutations['is_pathogenic']))
-    
-    num_workers = 3 if partition == "a" else 8
+    # print(sum(all_mutations['Ground']))
+    if num_workers is None:
+        num_workers = 3 if partition == "a" else 8
     
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # for mut in all_mutations.itertuples(index=False):
         #     executor.submit(thread, mut, partition)
         # # print(mut)
         
-        futures = [executor.submit(thread, mut, data, partition) for mut in all_mutations.itertuples(index=False)]
+        futures = [executor.submit(query, mut, data, ref_seq, subset, partition, project_name, log_fn) for mut in all_mutations.itertuples(index=False)]
         
         # Wait for all futures to complete
         for future in futures:
