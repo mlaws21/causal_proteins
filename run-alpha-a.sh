@@ -4,9 +4,9 @@
                                 # (this requests 2 hours)
 #SBATCH --partition=gpmoo-a          # Partition to submit to
 #SBATCH --mem=80G           # Request 10G of memory
-#SBATCH -o myoutput_%j.out  # File to which STDOUT will be written
+#SBATCH -o slurm/myoutput_%j.out  # File to which STDOUT will be written
                                 # (%j inserts jobid)
-#SBATCH -e myerrors_%j.err  # File to which STDERR will be written
+#SBATCH -e slurm/myerrors_%j.err  # File to which STDERR will be written
                                 # (%j inserts jobid)
 #SBATCH --gres=gpu:1        # Request two GPUs           
 

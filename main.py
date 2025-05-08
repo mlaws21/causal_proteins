@@ -21,13 +21,14 @@ from sequence_adjust.blosum import blosum_scores
 from alphafold_driver.alt_align import align_all
 from query.query2 import process_mutations
 from query.predict import process_files
+from query.results import calc_summary, generate_precision_recall_curve
 from datetime import datetime
 import argparse
 from cont_treatment.mono import generate_dr_curve
 from query.display import display
 
 PARTITION = 'b'
-GPUS = 8
+GPUS = 19
 log_lock = threading.Lock()
 
 
@@ -70,117 +71,123 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     if ref_sequence.endswith(".txt"):
         with open(ref_sequence, 'r') as file:
             ref_sequence = file.readline().strip()
-        
     
-    if isinstance(mutated_sequences, str):
-        mutated_data = pd.read_csv(mutated_sequences)
-        mutated_data.columns = ['ID', 'sequence', 'clinical_sig']
-
-    else:
-        ids, sequences, clinical_sigs = mutated_sequences
-        mutated_data = pd.DataFrame({
-            'ID': ids,
-            'sequence': sequences,
-            'clinical_sig': clinical_sigs
-        })
-      
-    # a bit ugly but ok  
-    true_vals = {'true', '1', 'yes'}
-    mutated_data['clinical_sig'] = mutated_data['clinical_sig'].map(
-        lambda x: str(x).strip().lower() in true_vals
-    )
-
-    # adding reference seq to dataset.
-    mutated_data.loc[len(mutated_data)] = ["ref", ref_sequence, False]
-    
-    unique_benign, unique_disease = split_and_unique(mutated_data)
-
-    
-    log(f"{len(unique_benign)} Benign Sequences Found")
-    log(f"{len(unique_disease)} Benign Sequences Found")
-    
-    patient_data = generate_synth(unique_benign, unique_disease, num_datapoints=num_datapoints)
-    log(f"{num_datapoints} rows generated")
-    
-    patient_data.loc[patient_data["Sequence"] == ref_sequence, "ID"] = "ref"
-    
-    
-    # remember to normalize
-    scores = []
-    if sequence_score_method.lower() == "proteinbert":
-        proteinbert_pkl = f"pickles/{project_name}_proteinbert_scores.pkl"
-        if os.path.exists(proteinbert_pkl):
-            log(f"Reading ProteinBERT scores from file {proteinbert_pkl}")
-            with open(proteinbert_pkl, "rb") as f:
-                scores = pickle.load(f)
-            log(f"{len(scores)} ProteinBERT scores read in")
-        else:
-            log("Computing ProteinBERT Scores")
-            scores = protein_bert_scores(ref_sequence, patient_data["Sequence"], protein_length)
-            with open(proteinbert_pkl, "wb") as f:
-                pickle.dump(scores, f)
-            log(f"{len(scores)} Scores Computed")
-    elif sequence_score_method.lower() == "blosum":
-        blosum_pkl = f"pickles/{project_name}_blosum_scores.pkl"
-        if os.path.exists(blosum_pkl):
-            log(f"Reading BLOSUM scores from file {blosum_pkl}")
-            with open(blosum_pkl, "rb") as f:
-                scores = pickle.load(f)
-            log(f"{len(scores)} BLOSUM scores read in")
-        else:
-            log("Computing BLOSUM Scores")
-            scores = blosum_scores(ref_sequence, patient_data["Sequence"], log)
-            with open(blosum_pkl, "wb") as f:
-                pickle.dump(scores, f)
-            log(f"{len(scores)} Scores Computed")
-    else:
-        scores = [0] * num_datapoints
-    
-    np_scores = np.array(scores)
-    normalized_scores = 0 if np.std(np_scores) == 0 else normalize(np_scores)
-    patient_data["Sequence_Score"] = normalized_scores
-    
-    fold_all(patient_data["ID"], patient_data["Sequence"], PARTITION, protein_name, log, num_workers=GPUS)
-    
-    align_pkl = f"pickles/{project_name}_alignments.pkl"
-    if os.path.exists(align_pkl):
-        log(f"Reading alignments from file {align_pkl}")
-        with open(align_pkl, "rb") as f:
-            alignments = pickle.load(f)
-        log(f"{len(alignments)} alignments read in")
-        
-    else:
-        log("Aligning all proteins")
-        alignments = align_all("ref", patient_data["ID"], protein_name, log)
-        with open(align_pkl, "wb") as f:
-            pickle.dump(alignments, f)
-        log(f"Aligned {len(alignments)} proteins")
-    
-    np_alignments = np.array(alignments)
-    
-    #optional normalize align scores
-    # np_alignments = normalize(np_alignments)
-    
-    patient_data["Align_Score"] = np_alignments
-    
-    log("Calculating Disease Column")
+    data_filepath = f'{project_name}_data.csv'
     
     numerical_cols = list(coeffs.keys())
     numerical_cols.remove("Intercept")
     
-    logit = coeffs["Intercept"] + sum([coeffs[x] * patient_data[x] for x in numerical_cols])
-    
-    # print(logit)
-    prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
-    patient_data["Disease"] = np.random.binomial(1, prob_Y)
+    if os.path.exists(data_filepath):
+        patient_data = pd.read_csv(data_filepath)
+        log(f"Reading Data from {data_filepath}")
+    else:
+        if isinstance(mutated_sequences, str):
+            mutated_data = pd.read_csv(mutated_sequences)
+            mutated_data.columns = ['ID', 'sequence', 'clinical_sig']
 
-    log(f"Mean of Probability of Disease: {np.mean(patient_data['Disease'])}")
-    
-    patient_data.to_csv(f'{project_name}_data.csv', index=False)
+        else:
+            ids, sequences, clinical_sigs = mutated_sequences
+            mutated_data = pd.DataFrame({
+                'ID': ids,
+                'sequence': sequences,
+                'clinical_sig': clinical_sigs
+            })
+        
+        # a bit ugly but ok  
+        true_vals = {'true', '1', 'yes'}
+        mutated_data['clinical_sig'] = mutated_data['clinical_sig'].map(
+            lambda x: str(x).strip().lower() in true_vals
+        )
+
+        # adding reference seq to dataset.
+        mutated_data.loc[len(mutated_data)] = ["ref", ref_sequence, False]
+        
+        unique_benign, unique_disease = split_and_unique(mutated_data)
+
+        
+        log(f"{len(unique_benign)} Benign Sequences Found")
+        log(f"{len(unique_disease)} Benign Sequences Found")
+        
+        patient_data = generate_synth(unique_benign, unique_disease, num_datapoints=num_datapoints)
+        log(f"{num_datapoints} rows generated")
+        
+        patient_data.loc[patient_data["Sequence"] == ref_sequence, "ID"] = "ref"
+        
+        
+        # remember to normalize
+        scores = []
+        if sequence_score_method.lower() == "proteinbert":
+            proteinbert_pkl = f"pickles/{project_name}_proteinbert_scores.pkl"
+            if os.path.exists(proteinbert_pkl):
+                log(f"Reading ProteinBERT scores from file {proteinbert_pkl}")
+                with open(proteinbert_pkl, "rb") as f:
+                    scores = pickle.load(f)
+                log(f"{len(scores)} ProteinBERT scores read in")
+            else:
+                log("Computing ProteinBERT Scores")
+                scores = protein_bert_scores(ref_sequence, patient_data["Sequence"], protein_length)
+                with open(proteinbert_pkl, "wb") as f:
+                    pickle.dump(scores, f)
+                log(f"{len(scores)} Scores Computed")
+        elif sequence_score_method.lower() == "blosum":
+            blosum_pkl = f"pickles/{project_name}_blosum_scores.pkl"
+            if os.path.exists(blosum_pkl):
+                log(f"Reading BLOSUM scores from file {blosum_pkl}")
+                with open(blosum_pkl, "rb") as f:
+                    scores = pickle.load(f)
+                log(f"{len(scores)} BLOSUM scores read in")
+            else:
+                log("Computing BLOSUM Scores")
+                scores = blosum_scores(ref_sequence, patient_data["Sequence"], log)
+                with open(blosum_pkl, "wb") as f:
+                    pickle.dump(scores, f)
+                log(f"{len(scores)} Scores Computed")
+        else:
+            scores = [0] * num_datapoints
+        
+        np_scores = np.array(scores)
+        normalized_scores = 0 if np.std(np_scores) == 0 else normalize(np_scores)
+        patient_data["Sequence_Score"] = normalized_scores
+        
+        fold_all(patient_data["ID"], patient_data["Sequence"], PARTITION, protein_name, log, num_workers=GPUS)
+        
+        align_pkl = f"pickles/{project_name}_alignments.pkl"
+        if os.path.exists(align_pkl):
+            log(f"Reading alignments from file {align_pkl}")
+            with open(align_pkl, "rb") as f:
+                alignments = pickle.load(f)
+            log(f"{len(alignments)} alignments read in")
+            
+        else:
+            log("Aligning all proteins")
+            alignments = align_all("ref", patient_data["ID"], protein_name, log)
+            with open(align_pkl, "wb") as f:
+                pickle.dump(alignments, f)
+            log(f"Aligned {len(alignments)} proteins")
+        
+        np_alignments = np.array(alignments)
+        
+        #optional normalize align scores
+        # np_alignments = normalize(np_alignments)
+        
+        patient_data["Align_Score"] = np_alignments
+        
+        log("Calculating Disease Column")
+        
+        logit = coeffs["Intercept"] + sum([coeffs[x] * patient_data[x] for x in numerical_cols])
+        
+        # print(logit)
+        prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
+        patient_data["Disease"] = np.random.binomial(1, prob_Y)
+
+        log(f"Mean of Probability of Disease: {np.mean(patient_data['Disease'])}")
+        
+        patient_data.to_csv(f'{project_name}_data.csv', index=False)
     
     # Now we generate the dose response curve
     
     numerical_cols.append("Disease")
+
     
     numerical_data = patient_data[numerical_cols]
     treatment = "Align_Score"
@@ -190,7 +197,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     log("Data Generation Complete")
 
 
-def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, subset=100):
+def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, subset=1000):
     
     with open(f"{project_name}_analysis.log", "w"):
         pass
@@ -224,8 +231,11 @@ def calculate_effect(project_name):
                 print(tolog, file=log_file)
     
     log(datetime.now())
+    treatment = "Align_Score"
     
-    process_files(project_name, log)
+    data = process_files(project_name, treatment, log)
+    
+    generate_precision_recall_curve(data)
     
     display(project_name, log)
     log("Effect Calculation Complete")

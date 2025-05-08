@@ -68,7 +68,13 @@ def fold(name, seq, partition, log_fn):
         json.dump(inp_data, json_file, indent=2)
         
     
-    run_cmd = f"/shared/25mdl4/thesis/alphafold_driver/run-alpha-{partition}.sh"
+    if node_has_free_gpu("gpmoo-a1") < 4:
+        run_cmd = f"/shared/25mdl4/thesis/run-alpha-{'a'}.sh"
+    elif node_has_free_gpu("gpmoo-b2") < 8:
+        run_cmd = f"/shared/25mdl4/thesis/run-alpha-{'b2'}.sh"
+    else:
+        run_cmd = f"/shared/25mdl4/thesis/run-alpha-{'b1'}.sh"
+        
     
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
 
@@ -85,8 +91,7 @@ def fold(name, seq, partition, log_fn):
     if check_job(job_num):
         
         end_time = time.time()
-        with log_lock:
-            log(f"{name} folded successfully. in {end_time-start_time}s.")
+        log_fn(f"{name} folded successfully. in {end_time-start_time}s.")
         return True
     return False
         # job has finished
@@ -110,8 +115,19 @@ def fold_all_from_datafile(data_file, partition, num_workers=None):
     # tasks = [executor.submit(worker_function, i) for i in range(10)]
 
     
+def node_has_free_gpu(node):
+    result = subprocess.check_output([
+        "squeue",
+        "--noheader",
+        "--format=%N"
+    ], text=True)
 
-def fold_all(ids, seqs, partition, project_name, log_fn, num_workers=None):
+    used = 0
+    for line in result.strip().split("\n"):
+        if line == node:
+            used += 1
+    return used
+def fold_all(ids, seqs, partition, protein_name, log_fn, num_workers=None):
     # Example function to be executed by threads
     
     log_fn("Beginning Fold Routine")
@@ -122,8 +138,15 @@ def fold_all(ids, seqs, partition, project_name, log_fn, num_workers=None):
 # Create a ThreadPoolExecutor with 4 threads
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         
-        for row_id, row_seq in zip(ids, seqs):
-            executor.submit(fold, f"{project_name}_{row_id}", row_seq, partition, log_fn)
+        for i, (row_id, row_seq) in enumerate(zip(ids, seqs)):
+            
+            # if node_has_free_gpu("gpmoo-b2") < 8:
+            # time.sleep(0.5)
+            executor.submit(fold, f"{protein_name}_{row_id}", row_seq, partition, log_fn)
+            # else:
+            #     print("here")
+            #     executor.submit(fold, f"{protein_name}_{row_id}", row_seq, "b1", log_fn)
+                
     # tasks = [executor.submit(worker_function, i) for i in range(10)]
 
      

@@ -82,6 +82,7 @@ def F(a, data, treatment):
     # this models the cumulative distribution function by convention
     
     series = data[treatment]
+    # print(series)
     n = len(series)
     edf = np.sum(series <= a) / n
     return edf
@@ -356,8 +357,9 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
             xlist, ylist = pickle.load(f)
             
     else:
+        # patient_numerical_data = patient_numerical_data.head(100)
         log_fn(f"Generating Dose Response Curve for {len(patient_numerical_data)} patients")
-
+        
         xlist, ylist = get_points(patient_numerical_data, treatment, outcome, log_fn)   
 
         gcm_x, gcm_y = non_smooth_gcm(xlist, ylist)
@@ -372,15 +374,16 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     
     # a, b = fit_exponential(xlist, ylist)
     # print(f"Fitted: y = {a:.4f} * exp({b:.4f} * x)")
+    plt.clf()
     
     cubic_spline = build_cubic_spline(xlist, ylist)
     # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
     # print(exp_ys)
     dr_graph_file = f"{project_name}_dr_curve.png"
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
+    plt.plot(np.arange(0, 10.5, 0.5), [compute_ground_truth(patient_numerical_data.copy(), i, treatment, outcome, coeffs) for i in np.arange(0, 10.5, 0.5)], color='blue', label="Ground", marker='o')
     plt.plot(np.arange(0, 10.5, 0.5), [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in np.arange(0, 10.5, 0.5)] , color='red', label="Estimate", marker='x')
-    plt.plot(np.arange(0, 10.5, 0.5), [compute_ground_truth(patient_numerical_data, i, treatment, outcome, coeffs) for i in np.arange(0, 10.5, 0.5)], color='blue', label="Ground", marker='o')
-    # plt.plot(np.arange(0, 10.5, 0.5), [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)], color='green', label="Exp", marker='+')
+    # plt.plot(np.arange(0, 10.5, 0.5), [F(i, patient_numerical_data, treatment=treatment) for i in np.arange(0, 10.5, 0.5)], color='green', label="Exp", marker='+')
     # plt.plot(np.arange(0, 10.5, 0.5), exp_ys, color='green', label="Exp", marker='+')
     
     # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')

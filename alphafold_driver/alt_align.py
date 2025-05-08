@@ -341,7 +341,7 @@ def compute_align(name1, name2):
 # tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
 
 
-def align_all(ref_id, seq_ids, project_name, log_fn):
+def align_all(ref_id, seq_ids, protein_name, log_fn):
     
     out_root = "/shared/25mdl4/af_output/"
     
@@ -357,11 +357,11 @@ def align_all(ref_id, seq_ids, project_name, log_fn):
         if i % (len(seq_ids) // 10) == 0:
             log_fn(f"{(i / len(seq_ids)) * 100:.0f}% complete")
             
-        folder1 = os.path.join(out_root, f"{project_name}_{idx}")
-        folder2 = os.path.join(out_root, f"{project_name}_{ref_id}")
+        folder1 = os.path.join(out_root, f"{protein_name}_{idx}")
+        folder2 = os.path.join(out_root, f"{protein_name}_{ref_id}")
         
         if not os.path.isdir(folder1):
-            log_fn(f"WARNING: {name} invalid path -- skipping" )
+            log_fn(f"WARNING: {idx} invalid path -- skipping" )
             continue
         
         cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'

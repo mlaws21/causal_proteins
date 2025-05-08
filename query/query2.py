@@ -42,6 +42,19 @@ def check_job(job_id):
             exit(1)
     
         time.sleep(5)
+
+def node_has_free_gpu(node):
+    result = subprocess.check_output([
+        "squeue",
+        "--noheader",
+        "--format=%N"
+    ], text=True)
+
+    used = 0
+    for line in result.strip().split("\n"):
+        if line == node:
+            used += 1
+    return used
         
 def fold(name, seq, partition, protein_name, log_fn):
 
@@ -84,7 +97,13 @@ def fold(name, seq, partition, protein_name, log_fn):
         json.dump(inp_data, json_file, indent=2)
         
     
-    run_cmd = f"/shared/25mdl4/thesis/alphafold_driver/run-alpha-{partition}.sh"
+    # run_cmd = f"/shared/25mdl4/thesis/alphafold_driver/run-alpha-{partition}.sh"
+    if node_has_free_gpu("gpmoo-a1") < 4:
+        run_cmd = f"/shared/25mdl4/thesis/run-alpha-{'a'}.sh"
+    elif node_has_free_gpu("gpmoo-b2") < 8:
+        run_cmd = f"/shared/25mdl4/thesis/run-alpha-{'b2'}.sh"
+    else:
+        run_cmd = f"/shared/25mdl4/thesis/run-alpha-{'b1'}.sh"
     
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
 
@@ -106,8 +125,8 @@ def fold(name, seq, partition, protein_name, log_fn):
     if check_job(job_num):
         
         end_time = time.time()
-        with log_lock:
-            log(f"{name} folded successfully. in {end_time-start_time}s.")
+
+        log_fn(f"{name} folded successfully. in {end_time-start_time}s.")
         return name
     return "BAD"
         # job has finished
@@ -346,8 +365,10 @@ def process_mutations(data_filename, spline_filename, ref_seq, subset, project_n
         # for mut in all_mutations.itertuples(index=False):
         #     executor.submit(thread, mut, partition)
         # # print(mut)
-        
-        futures = [executor.submit(query, mut, data, ref_seq, subset, partition, project_name, protein_name, log_fn) for mut in all_mutations.itertuples(index=False)]
+        futures = []
+        for mut in all_mutations.itertuples(index=False):
+            time.sleep(0.5)
+            futures.append(executor.submit(query, mut, data, ref_seq, subset, partition, project_name, protein_name, log_fn))
         
         # Wait for all futures to complete
         for future in futures:
