@@ -14,6 +14,7 @@ from scipy.interpolate import CubicSpline, PchipInterpolator
 from pygam import LinearGAM, s
 import sys
 import os
+from bisect import bisect_right
 
 
 def fa(data, treatment, log_fn=print):
@@ -344,6 +345,79 @@ def fit_exponential(xlist, ylist):
 
 #TODO Make sure the spline is convex -- but pretty close
 
+def make_strict_convex_underestimator(points, delta=0):
+    """
+    Given points = [(x1,y1),…,(xn,yn)], returns a convex, piecewise-linear
+    function f(x) with f(xi) < yi for all i.
+
+    If delta is None, we pick a tiny shift based on the data range.
+    """
+
+    # 1) sort by x
+    pts = sorted(points, key=lambda p: (p[0], p[1]))
+    xs_all, ys_all = zip(*pts)
+
+    # 2) build the *lower* convex hull of the points
+    hull = []
+    for x,y in pts:
+        # while the last turn is not "convex downwards", pop
+        while len(hull) >= 2:
+            x1,y1 = hull[-2]
+            x2,y2 = hull[-1]
+            # cross‐product test for right‐turn or collinear
+            if (x2 - x1)*(y - y1) - (y2 - y1)*(x - x1) <= 0:
+                hull.pop()
+            else:
+                break
+        hull.append((x,y))
+
+    # 3) pick a small delta if not provided
+    if delta is None:
+        y_min, y_max = min(ys_all), max(ys_all)
+        # use 1e-5 of the overall y‐range, or a tiny constant if flat
+        delta = (y_max - y_min)*1e-5 if y_max > y_min else 1e-6
+
+    # unpack hull into two lists for fast lookup
+    xs_h, ys_h = zip(*hull)
+
+    # 4) return the piecewise‐linear convex function f(x) = hull(x) - delta
+    def f(x):
+        # extrapolate with the first/last segment if outside data range
+        if x <= xs_h[0]:
+            i0, i1 = 0, 1
+        elif x >= xs_h[-1]:
+            i0, i1 = -2, -1
+        else:
+            # find the segment [xs_h[i], xs_h[i+1]] that contains x
+            i0 = bisect_right(xs_h, x) - 1
+            i1 = i0 + 1
+
+        x0, y0 = xs_h[i0], ys_h[i0]
+        x1, y1 = xs_h[i1], ys_h[i1]
+        t = (x - x0) / (x1 - x0)
+        # linear interp minus delta
+        return (1-t)*y0 + t*y1 - delta
+    
+    def df(x):
+        # same segment lookup
+        if x <= xs_h[0]:
+
+            i0, i1 = 0, 1
+        elif x >= xs_h[-1]:
+
+            
+            i0, i1 = -2, -1
+        else:
+            i0 = bisect_right(xs_h, x) - 1
+            i1 = i0 + 1
+
+        x0, y0 = xs_h[i0], ys_h[i0]
+        x1, y1 = xs_h[i1], ys_h[i1]
+        # slope of the line
+        return (y1 - y0) / (x1 - x0)
+
+    return f, df
+
 def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, treatment="Align_Score", outcome="Disease"):
     
     dr_pkl = f"pickles/{project_name}_spline.pkl"
@@ -375,21 +449,25 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     # a, b = fit_exponential(xlist, ylist)
     # print(f"Fitted: y = {a:.4f} * exp({b:.4f} * x)")
     plt.clf()
-    
+    pts = list(zip(xlist, ylist))
+    mygcm, mygcm_deriv = make_strict_convex_underestimator(pts)
     cubic_spline = build_cubic_spline(xlist, ylist)
     # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
     # print(exp_ys)
     dr_graph_file = f"{project_name}_dr_curve.png"
+    x_vals = np.arange(0, 10.5, 0.5)
+    
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
-    plt.plot(np.arange(0, 10.5, 0.5), [compute_ground_truth(patient_numerical_data.copy(), i, treatment, outcome, coeffs) for i in np.arange(0, 10.5, 0.5)], color='blue', label="Ground", marker='o')
-    plt.plot(np.arange(0, 10.5, 0.5), [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in np.arange(0, 10.5, 0.5)] , color='red', label="Estimate", marker='x')
-    # plt.plot(np.arange(0, 10.5, 0.5), [F(i, patient_numerical_data, treatment=treatment) for i in np.arange(0, 10.5, 0.5)], color='green', label="Exp", marker='+')
-    # plt.plot(np.arange(0, 10.5, 0.5), exp_ys, color='green', label="Exp", marker='+')
+    plt.plot(x_vals, [compute_ground_truth(patient_numerical_data.copy(), i, treatment, outcome, coeffs) for i in x_vals], color='blue', label="Ground", marker='o')
+    plt.plot(x_vals, [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in x_vals] , color='red', label="Estimate", marker='x')
+    # plt.plot(x_vals, [mygcm_deriv(F(i, patient_numerical_data, treatment=treatment)) for i in x_vals], color='black', label="gcm", marker='+')
+    # plt.plot(x_vals, [F(i, patient_numerical_data, treatment=treatment) for i in x_vals], color='green', label="Exp", marker='+')
+    # plt.plot(x_vals, exp_ys, color='green', label="Exp", marker='+')
     
     # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
     plt.xlabel("Alignment Score (Å)")
-    plt.ylabel("Probability of Cancer")
+    plt.ylabel("Probability of Disease")
     plt.title("Dose Response Curve")
         
     plt.grid(True)
