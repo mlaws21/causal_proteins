@@ -7,7 +7,7 @@ import sys
 file_path = sys.argv[1]
 # 1) Parameters
 # file_path = 'prionbinary_effect.log'    # your input file
-threshold = .10                # decide: score >= threshold ⇒ predict Pathogenic
+threshold = .0                # decide: score >= threshold ⇒ predict Pathogenic
 
 # 2) Parse file
 labels = []    # 1=Pathogenic, 0=Benign

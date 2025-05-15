@@ -455,6 +455,8 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
     # print(exp_ys)
     dr_graph_file = f"{project_name}_dr_curve.png"
+    dr_eps_file = f"{project_name}_dr_curve.eps"
+    
     x_vals = np.arange(0, 10.5, 0.5)
     
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
@@ -466,13 +468,16 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     
     # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
-    plt.xlabel("Alignment Score (Å)")
+    plt.xlabel("Misalignment Score (Å)")
     plt.ylabel("Probability of Disease")
     plt.title("Dose Response Curve")
         
     plt.grid(True)
     plt.legend()
     plt.savefig(dr_graph_file, format="png", dpi=300)
+    plt.savefig(dr_eps_file, format="eps", dpi=300)
+    
+    
     log_fn(f"Saving Dose Response Graph to {dr_graph_file}")
     
      
@@ -494,6 +499,8 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     plt.grid(True)
     plt.legend()
     plt.savefig(gcm_graph_file, format="png", dpi=300)
+    # plt.savefig(gcm_graph_file, format="eps", dpi=300)
+    
     log_fn(f"Saving GCM Graph to {dr_graph_file}")
 
     return cubic_spline
