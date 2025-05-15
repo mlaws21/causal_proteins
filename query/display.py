@@ -40,3 +40,12 @@ def display(project_name, log_fn):
     out_name = f"{project_name}_output.png"
     img.save(out_name)
     log_fn(f"Saved image as {out_name}")
+
+import sys
+def main():
+    
+    display(sys.argv[1], print)
+    
+
+if __name__ == "__main__":
+    main()

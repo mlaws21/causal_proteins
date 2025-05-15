@@ -53,22 +53,64 @@ def calc_effect(intervention_data_filename, full_data_filename, spline_filename,
     return mean_point_probs_cancer, np.array(boot_probs)#np.quantile(boot_probs, 0.025), np.quantile(boot_probs, 0.975) 
 
 
-def calc_effect_v2(intervention_data_filename, full_data_filename="final_full.csv", spline_filename="spline.pkl", treatment="Align_Score"):
+def calc_effect_v2(intervention_data_filename, full_data_filename, spline_filename, treatment, main_treatment, num_boostraps=250):
+
     
     full_data = pd.read_csv(full_data_filename)
+    
     intervention_data = pd.read_csv(intervention_data_filename)
 
-    with open(spline_filename, "rb") as f:
+    with open(f"pickles/{spline_filename}", "rb") as f:
         x_loaded, y_loaded = pickle.load(f)
 
     # Reconstruct the interpolator
     spline_loaded = PchipInterpolator(x_loaded, y_loaded)
 
+
     avg_effect = np.mean(intervention_data[treatment])
     
-    prob_cancer = spline_loaded(F(avg_effect, full_data["Align_Score"]), 1)
+    mean_point_probs_cancer = spline_loaded(F(avg_effect, full_data[main_treatment]), 1)
     
-    return prob_cancer
+    # point_probs_cancer = np.array([spline_loaded(F(i, full_data[main_treatment]), 1) for i in intervention_data[treatment]])
+    
+    # mean_point_probs_cancer = np.mean(point_probs_cancer)
+    
+    
+    boot_probs = []
+    for i in range(num_boostraps):
+        bootstrap_data = intervention_data.sample(n=len(intervention_data), replace=True, random_state=i)
+        
+        # boot_probs_cancer = np.array([spline_loaded(F(x, full_data[main_treatment]), 1) for x in bootstrap_data[treatment]])
+        
+        # mean_boot_probs_cancer = np.mean(boot_probs_cancer)
+        
+        avg_effect = np.mean(intervention_data[treatment])
+    
+        prob_cancer = spline_loaded(F(avg_effect, full_data[main_treatment]), 1)
+        
+        boot_probs.append(prob_cancer)
+        
+    
+    
+    return mean_point_probs_cancer, np.array(boot_probs)#np.quantile(boot_probs, 0.025), np.quantile(boot_probs, 0.975) 
+
+
+# def calc_effect_v2(intervention_data_filename, full_data_filename="final_full.csv", spline_filename="spline.pkl", treatment="Align_Score"):
+    
+#     full_data = pd.read_csv(full_data_filename)
+#     intervention_data = pd.read_csv(intervention_data_filename)
+
+#     with open(spline_filename, "rb") as f:
+#         x_loaded, y_loaded = pickle.load(f)
+
+#     # Reconstruct the interpolator
+#     spline_loaded = PchipInterpolator(x_loaded, y_loaded)
+
+#     avg_effect = np.mean(intervention_data[treatment])
+    
+#     prob_cancer = spline_loaded(F(avg_effect, full_data["Align_Score"]), 1)
+    
+#     return prob_cancer
 
 
 def draw_dose_response(full_data_filename="final_full.csv", spline_filename="spline.pkl", treatment="Align_Score"):

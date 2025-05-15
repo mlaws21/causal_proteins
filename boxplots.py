@@ -1,8 +1,9 @@
 import re
 import matplotlib.pyplot as plt
-
+import sys
+file_path = sys.argv[1]
 # 1) Read and parse the file, collecting point estimates by label
-file_path = 'prion506_effect.log'  # <-- update to your actual path/filename
+# file_path = 'prion_effect.log'  # <-- update to your actual path/filename
 benign_scores = []
 pathogenic_scores = []
 

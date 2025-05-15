@@ -3,10 +3,11 @@ import random
 random.seed(42)
 import numpy as np
 
-
+import sys
+file_path = sys.argv[1]
 # 1) Parameters
-file_path = 'prion429none_effect.log'    # your input file
-threshold = 0.0                # decide: score >= threshold ⇒ predict Pathogenic
+# file_path = 'prionbinary_effect.log'    # your input file
+threshold = .10                # decide: score >= threshold ⇒ predict Pathogenic
 
 # 2) Parse file
 labels = []    # 1=Pathogenic, 0=Benign

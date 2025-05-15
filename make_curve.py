@@ -2,8 +2,10 @@ import re
 import matplotlib.pyplot as plt
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
+import sys
+file_path = sys.argv[1]
 # 1) Read and parse the file
-file_path = 'prion506_effect.log'  # <-- replace with your filename
+# file_path = 'prionsequence_effect.log'  # <-- replace with your filename
 labels = []
 scores = []
 
