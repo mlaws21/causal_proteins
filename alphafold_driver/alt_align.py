@@ -67,63 +67,6 @@ def extract_plddt_and_coords(cif_file, json_file):
     return residues2cords, residues2plddt
 
 
-def findPandQ(cif1, cif2, json1, json2, thresh=70.0):
-    """Compares two structures by calculating distances and extracting pLDDT scores."""
-    residues2cords1, residues2plddt1 = extract_plddt_and_coords(cif1, json1)
-    residues2cords2, residues2plddt2 = extract_plddt_and_coords(cif2, json2)
-    
-    if len(residues2cords1) != len(residues2cords2):
-        return None
-
-    # print(plddt1.keys())
-    # conf_dists = []
-    P, Q, avg_conf = [], [], []
-    # print(len(coords1), len(coords2), len(plddt1), len(plddt2))
-    ctr = 0
-    
-    for residue_id in residues2cords1.keys():
-        if residue_id in residues2cords2:
-            # print(residue_id)
-            residue_coords1 = np.array(residues2cords1[residue_id])
-            residue_coords2 = np.array(residues2cords2[residue_id])
-            residue_plddt1 = np.array(residues2plddt1[residue_id])
-            residue_plddt2 = np.array(residues2plddt2[residue_id])
-            
-            # print(atom_plddt1)
-            
-            # print("atom coords", atom_coords1, atom_coords2)
-            # Check if both residues have the same number of atoms
-            if len(residue_coords1) == len(residue_coords2):
-                for c1, c2, p1, p2 in zip(residue_coords1, residue_coords2, residue_plddt1, residue_plddt2):
-                    # print(ctr, (p1 + p2) / 2)
-                    
-                    # NOTE: CHANGED
-                    # if (p1 + p2) / 2 > thresh:
-                    P.append(c1)
-                    Q.append(c2)
-                    avg_conf.append((p1 + p2) / 200)   
-
-                    # else:
-                    #     # hmm, is this okay?
-                    #     P.append([0,0,0])
-                    #     Q.append([0,0,0])
-                        
-                        
-                # if residue_plddt1[residue_id] > thresh
-                # distances = calculate_distances(residue_coords1, residue_coords2)
-                # print(distances)
-                
-            else:
-                pass
-                # print(f"Warning: Residue {residue_id} has different numbers of atoms between the two structures.")
-
-            ctr += 1
-            
-        else:
-            print("Error: we shouldnt be here")
-            
-    return np.array(P), np.array(Q), np.array(avg_conf)
-
 def kabsch_numpy(P, Q):
     """
     Computes the optimal rotation and translation to align two sets of points (P -> Q),
@@ -222,23 +165,23 @@ def weighted_kabsch_numpy(P, Q, avg_conf):
 
 
 # Main alignment routine
-def tm_align_rmsd(protein1, protein2, json1, json2, thresh=70.0):
-    # P = get_alpha_carbons_from_cif(protein1_file)
-    # P = extract_confident_atoms(protein1, json1)
-    # Q = extract_confident_atoms(protein2, json2)
+# def dual_weighted_rmsd_align(protein1, protein2, json1, json2, thresh=70.0):
+#     # P = get_alpha_carbons_from_cif(protein1_file)
+#     # P = extract_confident_atoms(protein1, json1)
+#     # Q = extract_confident_atoms(protein2, json2)
     
-    # Q = get_alpha_carbons_from_cif(protein2_file)
-    res = findPandQ(protein1, protein2, json1, json2, thresh)
+#     # Q = get_alpha_carbons_from_cif(protein2_file)
+#     res = findPandQ(protein1, protein2, json1, json2, thresh)
     
-    if res is None: 
-        return None
-    P, Q, avg_conf = res
-    #FINDME CHanged
-    rmsd1 = weighted_kabsch_numpy(P, Q, avg_conf)
-    # rmsd1 = kabsch_numpy(P, Q, avg_conf)
+#     if res is None: 
+#         return None
+#     P, Q, avg_conf = res
+#     #FINDME CHanged
+#     rmsd1 = weighted_kabsch_numpy(P, Q, avg_conf)
+#     # rmsd1 = kabsch_numpy(P, Q, avg_conf)
     
     
-    return rmsd1[2]
+#     return rmsd1[2]
     # Calculate TM-align based RMSD
     # best_rmsd = calculate_tm_rmsd(P, Q, iterations)
     
@@ -289,34 +232,34 @@ def tm_align_rmsd(protein1, protein2, json1, json2, thresh=70.0):
 #     updated_data.to_csv("align.csv", index=False)
     
     
-def compute_align(name1, name2):
+# def compute_align(name1, name2):
     
-    out_root = "/shared/25mdl4/af_output/"
+#     out_root = "/shared/25mdl4/af_output/"
     
     
-    # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,is_pathogenic
-    # ids = data["ID"]
+#     # ID,Old,White,Unhealthy,Align Score,Cancer,Sequence,is_pathogenic
+#     # ids = data["ID"]
     
 
-    folder1 = os.path.join(out_root, name1)
-    folder2 = os.path.join(out_root, name2)
+#     folder1 = os.path.join(out_root, name1)
+#     folder2 = os.path.join(out_root, name2)
         
     
-    if not os.path.isdir(folder1) or not os.path.isdir(folder2):
-        print(f"ERROR: {name1} invalid path -- skipping" )
-        exit(-1)
+#     if not os.path.isdir(folder1) or not os.path.isdir(folder2):
+#         print(f"ERROR: {name1} invalid path -- skipping" )
+#         exit(-1)
     
     
-    cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
-    cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
-    json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
-    json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
-    align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
+#     cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
+#     cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
+#     json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
+#     json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
+#     align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
     
-    # if align_score is None:
-    #     print(f"WARNING: nonsense mutation -- skipping")
-    #     continue
-    return align_score
+#     # if align_score is None:
+#     #     print(f"WARNING: nonsense mutation -- skipping")
+#     #     continue
+#     return align_score
     # row["Align Score"] = align_score
     
     # valid_rows.append(row)
@@ -341,7 +284,7 @@ def compute_align(name1, name2):
 # tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
 
 
-def align_all(ref_id, seq_ids, protein_name, log_fn):
+def align_all(ref_id, seq_ids, protein_name, alignment_function, log_fn):
     
     out_root = "/shared/25mdl4/af_output/"
     
@@ -368,7 +311,7 @@ def align_all(ref_id, seq_ids, protein_name, log_fn):
         cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
         json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
         json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
-        align_score = tm_align_rmsd(cif_file1, cif_file2, json_file1, json_file2)
+        align_score = alignment_function(cif_file1, cif_file2, json_file1, json_file2)
         
         if align_score is None:
             log_fn(f"WARNING: nonsense mutation -- skipping")

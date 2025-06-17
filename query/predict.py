@@ -161,7 +161,7 @@ def process_files(project_name, treatment, log_fn):
         significance = spl[-1][:-4]
         lab = 'Benign' if significance == 'b' else 'Pathogenic' if significance == 'p' else 'Unknown'
         mutation = "_".join(spl[2:-1])
-        point, bottom, top = calc_point_and_conf(filename, f'{project_name}_data.csv', f'{project_name}_spline.pkl', treatment)
+        point, bottom, top = calc_point_and_conf(filename, f'outputs/{project_name}/data.csv', f'{project_name}_spline.pkl', treatment)
         point_conf = f"Causal Effect: {point:.4f} ({bottom:.4f}, {top:.4f})"
         
         data.append((mutation, point, bottom, top, lab))

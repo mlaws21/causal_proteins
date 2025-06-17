@@ -18,7 +18,7 @@ from data_generation.mutgen import generate_synth, split_and_unique
 from alphafold_driver.driver import fold_all
 from sequence_adjust.proteinbert import protein_bert_scores
 from sequence_adjust.blosum import blosum_scores
-from alphafold_driver.alt_align import align_all
+from alignment_functions.alignment_functions import align_all, dual_weighted_rmsd_align
 from query.query2 import process_mutations
 from query.predict import process_files
 from query.results import calc_summary, generate_precision_recall_curve
@@ -37,7 +37,8 @@ def normalize(nums):
 # before this need to create this list
 # note need to ensure ids are filename safe
 # name = name.replace(":", "_").replace(">", "_").lower()
-def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], list[str], list[bool]], sequence_score_method, project_name: str, protein_name: str, coeffs, protein_length=253, num_datapoints=1000):
+# FIXME change back to 1000
+def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], list[str], list[bool]], sequence_score_method, project_name: str, protein_name: str, coeffs, protein_length=253, num_datapoints=100):
     '''
     TODO
 
@@ -57,13 +58,13 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     TODO
     '''
     
-    with open(f"{project_name}_generate.log", "w"):
+    with open(f"outputs/{project_name}/generate.log", "w"):
         pass
     
     
     def log(tolog):
         with log_lock:
-            with open(f"{project_name}_generate.log", "a") as log_file:
+            with open(f"outputs/{project_name}/generate.log", "a") as log_file:
                 print(tolog, file=log_file)
 
     log(datetime.now())
@@ -72,7 +73,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
         with open(ref_sequence, 'r') as file:
             ref_sequence = file.readline().strip()
     
-    data_filepath = f'{project_name}_data.csv'
+    data_filepath = f'outputs/{project_name}/data.csv'
     
     numerical_cols = list(coeffs.keys())
     numerical_cols.remove("Intercept")
@@ -160,7 +161,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
             
         else:
             log("Aligning all proteins")
-            alignments = align_all("ref", patient_data["ID"], protein_name, log)
+            alignments = align_all("ref", patient_data["ID"], protein_name, dual_weighted_rmsd_align, log)
             with open(align_pkl, "wb") as f:
                 pickle.dump(alignments, f)
             log(f"Aligned {len(alignments)} proteins")
@@ -182,7 +183,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
 
         log(f"Mean of Probability of Disease: {np.mean(patient_data['Disease'])}")
         
-        patient_data.to_csv(f'{project_name}_data.csv', index=False)
+        patient_data.to_csv(f'outputs/{project_name}/data.csv', index=False)
     
     # Now we generate the dose response curve
     
@@ -196,16 +197,16 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
     
     log("Data Generation Complete")
 
-
-def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, subset=1000):
+# FIXME CHANGE BACK TO 1000 
+def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, subset=10):
     
-    with open(f"{project_name}_analysis.log", "w"):
+    with open(f"outputs/{project_name}/analysis.log", "w"):
         pass
     
     
     def log(tolog):
         with log_lock:
-            with open(f"{project_name}_analysis.log", "a") as log_file:
+            with open(f"outputs/{project_name}/analysis.log", "a") as log_file:
                 print(tolog, file=log_file)
 
     log(datetime.now())
@@ -216,18 +217,18 @@ def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name,
         with open(ref_sequence, 'r') as file:
             ref_sequence = file.readline().strip()
             
-    process_mutations(data_csv, spline_pkl, ref_sequence, subset, project_name, protein_name, log, PARTITION, num_workers=GPUS)
+    process_mutations(data_csv, spline_pkl, ref_sequence, subset, project_name, protein_name, dual_weighted_rmsd_align, log, PARTITION, num_workers=GPUS)
     log("Analysis Complete")
     
 def calculate_effect(project_name):
     
-    with open(f"{project_name}_effect.log", "w"):
+    with open(f"outputs/{project_name}/effect.log", "w"):
         pass
     
     
     def log(tolog):
         with log_lock:
-            with open(f"{project_name}_effect.log", "a") as log_file:
+            with open(f"outputs/{project_name}/effect.log", "a") as log_file:
                 print(tolog, file=log_file)
     
     log(datetime.now())
@@ -256,6 +257,9 @@ def main():
     
     response = ""
     
+    if not os.path.exists(f"outputs/{args.project}"):
+        os.makedirs(f"outputs/{args.project}")
+    
     while True:
         print(f"Welcome to Project [{args.project}]! Would you like to:")
         print("- Generate Data [1]")
@@ -266,15 +270,15 @@ def main():
         response = input("> ")
         
         if response == '1':
-            print(f"Generating Data Effects and Logging Output to {args.project}_generate.log")
+            print(f"Generating Data Effects and Logging Output to [outputs/{args.project}/generate.log]")
             generate_data(args.ref, args.input, args.metric, args.project, args.protein, coeffs)
             
         elif response == '2':
-            print(f"Analyzing Data and Logging Output to {args.project}_analysis.log")
-            analyze_data(f"{args.project}_data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project, args.protein)
+            print(f"Analyzing Data and Logging Output to [outputs/{args.project}/analysis.log]")
+            analyze_data(f"outputs/{args.project}/data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project, args.protein)
             
         elif response == '3':
-            print(f"Calculating Effects and Logging Output to {args.project}_effect.log")
+            print(f"Calculating Effects and Logging Output to [outputs/{args.project}/effect.log]")
             calculate_effect(args.project)
         elif response == '4':
             print("HELP MESSAGE")

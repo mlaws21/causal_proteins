@@ -454,8 +454,12 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     cubic_spline = build_cubic_spline(xlist, ylist)
     # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
     # print(exp_ys)
-    dr_graph_file = f"{project_name}_dr_curve.png"
-    dr_eps_file = f"{project_name}_dr_curve.eps"
+    
+    if not os.path.exists(f"outputs/{project_name}/results"):
+        os.makedirs(f"outputs/{project_name}/results")
+    
+    dr_graph_file = f"outputs/{project_name}/results/dr_curve.png"
+    dr_eps_file =f"outputs/{project_name}/results/dr_curve.eps"
     
     x_vals = np.arange(0, 10.5, 0.5)
     
@@ -483,7 +487,7 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
      
     plt.clf()
 
-    gcm_graph_file = f"{project_name}_gcm.png"
+    gcm_graph_file = f"outputs/{project_name}/results/gcm.png"
     
     plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
     plt.scatter(xlist, ylist, color='blue', label='Points')
@@ -501,7 +505,7 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     plt.savefig(gcm_graph_file, format="png", dpi=300)
     # plt.savefig(gcm_graph_file, format="eps", dpi=300)
     
-    log_fn(f"Saving GCM Graph to {dr_graph_file}")
+    log_fn(f"Saving GCM Graph to {gcm_graph_file}")
 
     return cubic_spline
 

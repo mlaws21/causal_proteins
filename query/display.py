@@ -3,7 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 def display(project_name, log_fn):
 # Load input
-    with open(f"{project_name}_effect.log", "r") as f:
+    with open(f"outputs/{project_name}/effect.log", "r") as f:
         lines = f.readlines()[1:-2]  # skip timestamp
 
     # Parse lines
@@ -37,7 +37,7 @@ def display(project_name, log_fn):
         draw.text((padding, y), line, fill=color, font=font)
 
     # Save image
-    out_name = f"{project_name}_output.png"
+    out_name = f"outputs/{project_name}/results/ordering.png"
     img.save(out_name)
     log_fn(f"Saved image as {out_name}")
 
