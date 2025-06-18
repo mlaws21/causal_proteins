@@ -212,7 +212,7 @@ def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name,
 
     log(datetime.now())
     
-    os.makedirs(f"intervention_data/{project_name}", exist_ok=True)
+
     
     if ref_sequence.endswith(".txt"):
         with open(ref_sequence, 'r') as file:
@@ -273,8 +273,8 @@ def main():
     if not os.path.exists(f"outputs/{args.project}/results"):
         os.makedirs(f"outputs/{args.project}/results")
         
-    if not os.path.exists(f"intervention_data/"):
-        os.makedirs(f"intervention_data/")
+    if not os.path.exists(f"outputs/{args.project}/intervention_data"):
+        os.makedirs(f"outputs/{args.project}/intervention_data")
         
     if not os.path.exists(f"slurm/"):
         os.makedirs(f"slurm/")

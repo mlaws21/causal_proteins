@@ -88,7 +88,7 @@ def calc_point_and_conf(intervention_data_filename, full_data_filename, spline_f
 # Define the function to process each file
 def process_files(project_name, treatment, log_fn):
     
-    regex = f"intervention_data/{project_name}/post_treatment*.csv"
+    regex = f"outputs/{project_name}/intervention_data/*.csv"
     data = []
     # Find all CSV files matching the pattern
     csv_files = glob.glob(regex) # "post_treatment*.csv"
@@ -96,11 +96,12 @@ def process_files(project_name, treatment, log_fn):
     for filename in csv_files:
         # Assuming `mut` and `spline_filename` are defined somewhere
         
-        spl = filename.split("_")
+        spl = filename.split("/")
         
-        significance = spl[-1][:-4]
+        significance = spl[-1][-5]
         lab = 'Benign' if significance == 'b' else 'Pathogenic' if significance == 'p' else 'Unknown'
-        mutation = "_".join(spl[2:-1])
+        # mutation = "_".join(spl[2:-1])
+        mutation = spl[-1][:-6]
         point, bottom, top = calc_point_and_conf(filename, f'outputs/{project_name}/data.csv', f'outputs/{project_name}/pickles/spline.pkl', treatment)
         point_conf = f"Causal Effect: {point:.4f} ({bottom:.4f}, {top:.4f})"
         

@@ -289,7 +289,7 @@ def query(mut_data, data, ref_seq, num_individuals, partition, project_name, pro
         post_treatment.append(new_row)
         
         post_treatment_df = pd.DataFrame(post_treatment)
-        pt_filename = f'intervention_data/{project_name}/post_treatment_{mutation}_{"p" if mut_data.Ground else "b"}.csv'
+        pt_filename = f'outputs/{project_name}/intervention_data/{mutation}_{"p" if mut_data.Ground else "b"}.csv'
         
         log_fn(f"Post Treatment Data Created and saved to {pt_filename}")
         # post_treatment_df.to_csv(f'post_treatment_{mutation.replace(":", "_").replace(">", "_")}_{"p" if mut_data.Ground else "b"}.csv', index=False)

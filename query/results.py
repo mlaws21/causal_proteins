@@ -13,7 +13,7 @@ def ordering(project_name, log_fn):
         lines = f.readlines()[1:-2]  # skip timestamp
 
     # Parse lines
-    pattern = re.compile(r"treatment_(\w+)\s+\[(\w+)\]: Causal Effect:\s+([-+]?[0-9]*\.?[0-9]+)")
+    pattern = re.compile(r"(\w+)\s+\[(\w+)\]: Causal Effect:\s+([-+]?[0-9]*\.?[0-9]+)")
     data = []
 
     for line in lines:
@@ -55,7 +55,7 @@ def generate_boxplot(project_name):
     pathogenic_scores = []
 
     pattern = re.compile(
-        r'treatment_[^\[]+\[(Benign|Pathogenic)\]: '
+        r'[^\[]+\[(Benign|Pathogenic)\]: '
         r'Causal Effect: (?P<score>-?\d+\.\d+)'
     )
 
@@ -94,7 +94,7 @@ def generate_pr_curve(project_name):
 
     # pattern captures “Benign” vs “Pathogenic” and the causal‐effect score
     pattern = re.compile(
-        r'treatment_[^\[]+\[(?P<label>Benign|Pathogenic)\]: '
+        r'[^\[]+\[(?P<label>Benign|Pathogenic)\]: '
         r'Causal Effect: -?\d+\.\d+ \('
         r'(?P<low>-?\d+\.\d+),'
     )
@@ -142,7 +142,7 @@ def generate_summary(project_name, threshold=0.0):
     point_est = []
 
     pattern = re.compile(
-        r'treatment_[^\[]+\[(?P<label>Benign|Pathogenic)\]:\s*'      # label
+        r'[^\[]+\[(?P<label>Benign|Pathogenic)\]:\s*'      # label
         r'Causal Effect:\s*'
         r'(?P<point>-?\d+\.\d+)\s*'                                  # point estimate
         r'\(\s*'
