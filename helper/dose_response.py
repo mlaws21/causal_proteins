@@ -205,47 +205,6 @@ def is_convex(x, f):
 
     return True
 
-
-def compute_ground(data, treatment_value, treatment="T", outcome="Y"):
-    # df1 = pd.read_csv("synthetic_data.csv")
-    # df2 = pd.read_csv("synthetic_data_addition.csv")
-    
-    # data = df1
-    
-    # data = pd.concat([df1, df2], ignore_index=True)
-    
-    data[treatment] = treatment_value
-    
-    # b0, b1, b2, b3, b4 = -1, 0.1, -0.5, 0.3, 0.8  # Coefficients
-    
-    # logit = (
-    #     b0
-    #     + b1 * data["X1"]
-    #     + b2 * data["X2"]
-    #     + b3 * data["X3"]
-    #     + b4 * data[treatment]
-    # )
-    
-    #BRCA COEFFS
-    # intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.3
-    
-    #PRION COEFFS
-    intercept, coef_old, coef_white, coef_unhealthy, coef_align = -3, 0.5, 0.1, 0.3, 0.8  # Coefficients
-    
-    logit = (
-        intercept
-        + coef_old * data["Old"]
-        + coef_white * data["White"]
-        + coef_unhealthy * data["Unhealthy"]
-        + coef_align * data["Align_Score"]
-    )
-    
-    prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
-    
-    data[outcome] = np.random.binomial(1, prob_Y)
-    
-    return data[outcome].mean()
-
 def compute_ground_truth(data, treatment_value, treatment, outcome, coeffs):
 
     data[treatment] = treatment_value
@@ -271,6 +230,20 @@ def build_cubic_spline(x_data, f_data):
     cs = PchipInterpolator(x_data, f_data)
     return cs
 
+def verify(xs, ys, gcm_x, gcm_y):
+    # verifies the GCM -- true if verifies
+    
+    # this enforces the minorant constrant
+    
+    for y, gy in zip(ys, gcm_y):
+
+        if np.round(y, 3) < np.round(gy, 3):
+            print("Minorant Constraint Violated")
+            print(np.round(y, 3), np.round(gy, 3))
+            return False
+    
+    return is_convex(gcm_x, gcm_y)
+
 def backdoor(a, data, treatment="T", outcome="Y"):
     
     
@@ -286,63 +259,6 @@ def backdoor(a, data, treatment="T", outcome="Y"):
     data_0[treatment] = 0
     return np.mean(model.predict(data_a)) - np.mean(model.predict(data_0))
     
-def verify(xs, ys, gcm_x, gcm_y):
-    # verifies the GCM -- true if verifies
-    
-    # this enforces the minorant constrant
-    
-    for y, gy in zip(ys, gcm_y):
-
-        if np.round(y, 3) < np.round(gy, 3):
-            print("Minorant Constraint Violated")
-            print(np.round(y, 3), np.round(gy, 3))
-            return False
-    
-    return is_convex(gcm_x, gcm_y)
-
-def verify_spline_convex(spline, data, treatment):
-    
-    myrange = np.linspace(data[treatment].min(), data[treatment].max(), 100)
-    snd_derivs = np.array([spline(F(i, data, treatment=treatment), 2) for i in myrange])
-    
-    # assert(np.all(snd_derivs >= 0))
-    # print(snd_derivs)
-    
-
-    # plt.savefig(f"dose_response{str(count)}.png", format="png", dpi=300)
-    
-    plt.clf()
-
-
-def exp_func(x, a, b):
-    return a * np.exp(b * x)
-
-def exp_deriv(x, a, b):
-    return a * b * np.exp(b * x)
-    
-def fit_exponential(xlist, ylist):
-    """
-    Fits an exponential curve y = a * exp(b * x) to the data.
-    
-    Parameters:
-        xlist (list or np.ndarray): The x values.
-        ylist (list or np.ndarray): The y values.
-    
-    Returns:
-        a, b (float): Parameters for the best fit y = a * exp(b * x)
-    """
-
-    # Define the exponential model
-
-    
-    # Convert input to numpy arrays
-    x = np.array(xlist)
-    y = np.array(ylist)
-
-    # Fit the curve
-    params, _ = curve_fit(exp_func, x, y, p0=(1.0, 0.1))  # initial guess a=1, b=0.1
-    return params[0], params[1]
-
 #TODO Make sure the spline is convex -- but pretty close
 
 def make_strict_convex_underestimator(points, delta=0):
@@ -446,14 +362,11 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
             
     log_fn("Building Spline")
     
-    # a, b = fit_exponential(xlist, ylist)
-    # print(f"Fitted: y = {a:.4f} * exp({b:.4f} * x)")
     plt.clf()
     pts = list(zip(xlist, ylist))
     mygcm, mygcm_deriv = make_strict_convex_underestimator(pts)
     cubic_spline = build_cubic_spline(xlist, ylist)
-    # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
-    # print(exp_ys)
+
     
     dr_graph_file = f"outputs/{project_name}/results/dr_curve.png"
     dr_eps_file =f"outputs/{project_name}/results/dr_curve.eps"
@@ -465,8 +378,6 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     plt.plot(x_vals, [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in x_vals] , color='red', label="Estimate", marker='x')
     # plt.plot(x_vals, [mygcm_deriv(F(i, patient_numerical_data, treatment=treatment)) for i in x_vals], color='black', label="gcm", marker='+')
     # plt.plot(x_vals, [F(i, patient_numerical_data, treatment=treatment) for i in x_vals], color='green', label="Exp", marker='+')
-    # plt.plot(x_vals, exp_ys, color='green', label="Exp", marker='+')
-    
     # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
     plt.xlabel("Misalignment Score (Å)")
@@ -488,7 +399,6 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     
     plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
     plt.scatter(xlist, ylist, color='blue', label='Points')
-    # plt.plot(np.arange(0, 1.0001, 0.001), [exp_func(x, a, b) for x in np.arange(0, 1.0001, 0.001)], color='red', label="Exp", marker='+')
     
 
     # Add labels and title

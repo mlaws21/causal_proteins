@@ -17,7 +17,6 @@ def F(a, series):
     edf = np.sum(series <= a) / n
     return edf
 
-# TODO FINDME
 def calc_effect(intervention_data_filename, full_data_filename, spline_filename, treatment, main_treatment, num_boostraps=250):
 
     
@@ -51,17 +50,6 @@ def calc_effect(intervention_data_filename, full_data_filename, spline_filename,
     
     
     return mean_point_probs_cancer, np.array(boot_probs)#np.quantile(boot_probs, 0.025), np.quantile(boot_probs, 0.975) 
-
-
-def draw_dose_response(full_data_filename="final_full.csv", spline_filename="spline.pkl", treatment="Align_Score"):
-    
-    full_data = pd.read_csv(full_data_filename)
-    
-    with open(spline_filename, "rb") as f:
-        x_loaded, y_loaded = pickle.load(f)
-
-    # Reconstruct the interpolator
-    spline_loaded = PchipInterpolator(x_loaded, y_loaded)
     
     
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
@@ -115,16 +103,7 @@ def process_files(project_name, treatment, log_fn):
      
 
 def main():
-    
-    #TODO CONFIDENCE INTERVAL
-    draw_dose_response()
-    
-    if len(sys.argv) < 2:
-        print("Usage: python predict.py [intervention file]")
-        exit(-1)
-    intervention_data_filename = sys.argv[1]
-
-    print(calc_point_and_conf(intervention_data_filename, "prion_spline.pkl"))
+    pass
     
 
     

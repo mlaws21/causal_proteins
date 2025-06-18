@@ -10,20 +10,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import itertools
 
 
-
-# from mutgen import generate_brca_mutations, generate_prion_mutation
-# FIXME this is direct pathing call from main
-# from alphafold_driver.alt_align import tm_align_rmsd
-# from predict import calc_point_and_conf
-
-
 # - mutation should be in XNY form 
 # - data needs to include sequences, mutations
 # - dr_curve_func should be the dose response curve -- takes in values [0, inf)
 #   that represent align scores, then outputs number [0, 1] as p(cancer)
-
-
-# have to recompute the sequences
 
 def check_job(job_id):
     while True:
