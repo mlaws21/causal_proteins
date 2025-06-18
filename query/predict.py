@@ -25,7 +25,7 @@ def calc_effect(intervention_data_filename, full_data_filename, spline_filename,
     
     intervention_data = pd.read_csv(intervention_data_filename)
 
-    with open(f"pickles/{spline_filename}", "rb") as f:
+    with open(f"{spline_filename}", "rb") as f:
         x_loaded, y_loaded = pickle.load(f)
 
     # Reconstruct the interpolator
@@ -51,66 +51,6 @@ def calc_effect(intervention_data_filename, full_data_filename, spline_filename,
     
     
     return mean_point_probs_cancer, np.array(boot_probs)#np.quantile(boot_probs, 0.025), np.quantile(boot_probs, 0.975) 
-
-
-def calc_effect_v2(intervention_data_filename, full_data_filename, spline_filename, treatment, main_treatment, num_boostraps=250):
-
-    
-    full_data = pd.read_csv(full_data_filename)
-    
-    intervention_data = pd.read_csv(intervention_data_filename)
-
-    with open(f"pickles/{spline_filename}", "rb") as f:
-        x_loaded, y_loaded = pickle.load(f)
-
-    # Reconstruct the interpolator
-    spline_loaded = PchipInterpolator(x_loaded, y_loaded)
-
-
-    avg_effect = np.mean(intervention_data[treatment])
-    
-    mean_point_probs_cancer = spline_loaded(F(avg_effect, full_data[main_treatment]), 1)
-    
-    # point_probs_cancer = np.array([spline_loaded(F(i, full_data[main_treatment]), 1) for i in intervention_data[treatment]])
-    
-    # mean_point_probs_cancer = np.mean(point_probs_cancer)
-    
-    
-    boot_probs = []
-    for i in range(num_boostraps):
-        bootstrap_data = intervention_data.sample(n=len(intervention_data), replace=True, random_state=i)
-        
-        # boot_probs_cancer = np.array([spline_loaded(F(x, full_data[main_treatment]), 1) for x in bootstrap_data[treatment]])
-        
-        # mean_boot_probs_cancer = np.mean(boot_probs_cancer)
-        
-        avg_effect = np.mean(intervention_data[treatment])
-    
-        prob_cancer = spline_loaded(F(avg_effect, full_data[main_treatment]), 1)
-        
-        boot_probs.append(prob_cancer)
-        
-    
-    
-    return mean_point_probs_cancer, np.array(boot_probs)#np.quantile(boot_probs, 0.025), np.quantile(boot_probs, 0.975) 
-
-
-# def calc_effect_v2(intervention_data_filename, full_data_filename="final_full.csv", spline_filename="spline.pkl", treatment="Align_Score"):
-    
-#     full_data = pd.read_csv(full_data_filename)
-#     intervention_data = pd.read_csv(intervention_data_filename)
-
-#     with open(spline_filename, "rb") as f:
-#         x_loaded, y_loaded = pickle.load(f)
-
-#     # Reconstruct the interpolator
-#     spline_loaded = PchipInterpolator(x_loaded, y_loaded)
-
-#     avg_effect = np.mean(intervention_data[treatment])
-    
-#     prob_cancer = spline_loaded(F(avg_effect, full_data["Align_Score"]), 1)
-    
-#     return prob_cancer
 
 
 def draw_dose_response(full_data_filename="final_full.csv", spline_filename="spline.pkl", treatment="Align_Score"):
@@ -161,7 +101,7 @@ def process_files(project_name, treatment, log_fn):
         significance = spl[-1][:-4]
         lab = 'Benign' if significance == 'b' else 'Pathogenic' if significance == 'p' else 'Unknown'
         mutation = "_".join(spl[2:-1])
-        point, bottom, top = calc_point_and_conf(filename, f'outputs/{project_name}/data.csv', f'{project_name}_spline.pkl', treatment)
+        point, bottom, top = calc_point_and_conf(filename, f'outputs/{project_name}/data.csv', f'outputs/{project_name}/pickles/spline.pkl', treatment)
         point_conf = f"Causal Effect: {point:.4f} ({bottom:.4f}, {top:.4f})"
         
         data.append((mutation, point, bottom, top, lab))
@@ -182,24 +122,10 @@ def main():
         print("Usage: python predict.py [intervention file]")
         exit(-1)
     intervention_data_filename = sys.argv[1]
-    
-    # print("Causal Effect:", calc_effect(intervention_data_filename))
-    
-    # print("Causal Effect v2:", calc_effect_v2(intervention_data_filename))
-    # effect = calc_effect(intervention_data_filename, treatment="Align_Score_do_mut") - calc_effect(intervention_data_filename, treatment="Align_Score_do_no_mut")
-    
-    
+
     print(calc_point_and_conf(intervention_data_filename, "prion_spline.pkl"))
     
-    
-    
-    
-    
-    # effect2 = calc_effect_v2(intervention_data_filename, treatment="Align_Score_do_mut") - calc_effect_v2(intervention_data_filename, treatment="Align_Score_do_no_mut")
-    
-    # print("Causal Effect v2:", effect2)
-   
-    
+
     
 if __name__ == "__main__":
     main()

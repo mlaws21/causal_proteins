@@ -1,7 +1,7 @@
 import re
 from PIL import Image, ImageDraw, ImageFont
 
-def display(project_name, log_fn):
+def ordering(project_name, log_fn):
 # Load input
     with open(f"outputs/{project_name}/effect.log", "r") as f:
         lines = f.readlines()[1:-2]  # skip timestamp

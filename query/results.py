@@ -1,180 +1,225 @@
-# def calc_summary(data, cutoff=0):
-#     """
-#     Calculates classification summary statistics based on a manually chosen cutoff.
-
-#     Parameters:
-#     - data: List of tuples in the form (mutation, point_estimate, lower_CI, upper_CI, label)
-#             where label is either 'Benign' or 'Pathogenic'
-#     - cutoff: The decision boundary. If lower_CI >= cutoff, we predict "Pathogenic".
-
-#     Returns:
-#     - A dictionary with TP, FP, TN, FN, FPR, TPR, accuracy, precision
-#     """
-
-#     benign_pos = 0  # False Positives
-#     benign_neg = 0  # True Negatives
-#     path_pos = 0    # True Positives
-#     path_neg = 0    # False Negatives
-
-#     for i in data:
-#         mutation, point, bottom, top, lab = i
-
-#         if bottom < cutoff:
-#             # Predict "Benign"
-#             if lab == "Benign":
-#                 benign_neg += 1  # True Negative
-#             elif lab == "Pathogenic":
-#                 path_neg += 1    # False Negative
-#         else:
-#             # Predict "Pathogenic"
-#             if lab == "Benign":
-#                 benign_pos += 1  # False Positive
-#             elif lab == "Pathogenic":
-#                 path_pos += 1    # True Positive
-
-#     TP = path_pos
-#     FP = benign_pos
-#     TN = benign_neg
-#     FN = path_neg
-
-#     # Derived metrics
-#     FPR = FP / (FP + TN) if (FP + TN) > 0 else 0.0
-#     TPR = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-#     Accuracy = (TP + TN) / (TP + FP + TN + FN) if (TP + FP + TN + FN) > 0 else 0.0
-#     Precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-
-#     # Print results
-#     print(f"Cutoff: {cutoff}")
-#     print(f"True Positives (Pathogenic predicted Pathogenic): {TP}")
-#     print(f"False Positives (Benign predicted Pathogenic): {FP}")
-#     print(f"True Negatives (Benign predicted Benign): {TN}")
-#     print(f"False Negatives (Pathogenic predicted Benign): {FN}")
-#     print(f"False Positive Rate (FPR): {FPR:.3f}")
-#     print(f"True Positive Rate (Recall/TPR): {TPR:.3f}")
-#     print(f"Accuracy: {Accuracy:.3f}")
-#     print(f"Precision: {Precision:.3f}")
-
-#     return {
-#         "TP": TP, "FP": FP, "TN": TN, "FN": FN,
-#         "FPR": FPR, "TPR": TPR,
-#         "accuracy": Accuracy,
-#         "precision": Precision
-#     }
-
-
-# import numpy as np
-# import matplotlib.pyplot as plt
-
-# def sweep_cutoffs_for_precision(data, thresholds, min_recall=0.0):
-#     results = []
-
-#     for cutoff in thresholds:
-#         metrics = calc_summary(data, cutoff)
-#         metrics["cutoff"] = cutoff
-#         results.append(metrics)
-
-#     return results
-
-# def plot_precision_with_min_recall(results, min_recall=0.0):
-#     filtered = [r for r in results if r["TPR"] >= min_recall]
-
-#     if not filtered:
-#         print(f"No cutoffs meet the minimum recall of {min_recall}")
-#         return None
-
-#     cutoffs = [r["cutoff"] for r in filtered]
-#     precisions = [r["precision"] for r in filtered]
-#     recalls = [r["TPR"] for r in filtered]
-
-#     best_idx = np.argmax(precisions)
-#     best_cutoff = cutoffs[best_idx]
-
-#     plt.figure(figsize=(12, 6))
-#     plt.plot(cutoffs, precisions, marker='o', label="Precision")
-#     plt.axvline(best_cutoff, color='red', linestyle='--', label=f"Best cutoff = {best_cutoff:.3f}")
-    
-#     # Annotate each point with its precision
-#     for x, y in zip(cutoffs, precisions):
-#         plt.text(x, y + 0.01, f"{y:.2f}", fontsize=8, ha='center')
-
-#     plt.xlabel("Cutoff")
-#     plt.ylabel("Precision")
-#     plt.title(f"Precision vs Cutoff (min recall = {min_recall})")
-#     plt.grid(True)
-#     plt.legend()
-#     plt.tight_layout()
-#     plt.savefig("curr_precison_curve.png", format="png", dpi=300)
-
-#     print(f"Best cutoff for precision (recall ≥ {min_recall}): {best_cutoff:.4f}")
-#     print(f"Precision: {precisions[best_idx]:.3f} | Recall: {recalls[best_idx]:.3f}")
-    
-#     return best_cutoff
-
-
-# def plot_cutoff(data):
-
-#     bottoms = [x[2] for x in data]
-#     thresholds = np.linspace(0, max(bottoms), 100)
-#     results = sweep_cutoffs_for_precision(data, thresholds, min_recall=0.4)
-#     best_cutoff = plot_precision_with_min_recall(results, min_recall=0.4)
 
 import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw, ImageFont
+import re
+from sklearn.metrics import precision_recall_curve, average_precision_score
+import random
+random.seed(42)
 import numpy as np
-import pandas as pd
 
-def calc_summary(data, cutoff=0):
-    benign_pos = 0
-    benign_neg = 0
-    path_pos = 0
-    path_neg = 0
+def ordering(project_name, log_fn):
+# Load input
+    with open(f"outputs/{project_name}/effect.log", "r") as f:
+        lines = f.readlines()[1:-2]  # skip timestamp
 
-    for i in data:
-        mutation, point, bottom, top, lab = i
+    # Parse lines
+    pattern = re.compile(r"treatment_(\w+)\s+\[(\w+)\]: Causal Effect:\s+([-+]?[0-9]*\.?[0-9]+)")
+    data = []
 
-        if bottom < cutoff:
-            if lab == "Benign":
-                benign_neg += 1  # TN
-            elif lab == "Pathogenic":
-                path_neg += 1    # FN
-        else:
-            if lab == "Benign":
-                benign_pos += 1  # FP
-            elif lab == "Pathogenic":
-                path_pos += 1    # TP
+    for line in lines:
+        match = pattern.search(line)
+        if match:
+            treatment, label, effect = match.groups()
+            data.append((line.strip(), float(effect), label.lower()))
 
-    TP = path_pos
-    FP = benign_pos
-    TN = benign_neg
-    FN = path_neg
+    # Sort by effect
+    data.sort(key=lambda x: x[1], reverse=True)
 
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+    # Parameters
+    font = ImageFont.load_default()  # or use truetype if you want custom font
+    line_height = 20
+    padding = 10
+    img_width = 400
+    img_height = padding * 2 + line_height * len(data)
 
-    return precision, recall
+    # Create image
+    img = Image.new("RGB", (img_width, img_height), color="white")
+    draw = ImageDraw.Draw(img)
 
-def generate_precision_recall_curve(data, save_path="precision_recall_curve.png"):
-    precisions = []
-    recalls = []
-    
-    thresholds = sorted([x[2] for x in data])
-    # thresholds = np.linspace(0, max(bottoms), 100)
-    # print(thresholds)
-    for t in thresholds:
-        p, r = calc_summary(data, t)
-        precisions.append(p)
-        recalls.append(r)
-        
+    # Draw each line
+    for i, (line, _, label) in enumerate(data):
+        y = padding + i * line_height
+        color = "red" if label == "pathogenic" else "green"
+        draw.text((padding, y), line, fill=color, font=font)
+
+    # Save image
+    out_name = f"outputs/{project_name}/results/ordering.png"
+    img.save(out_name)
+    log_fn(f"Saved image as {out_name}")
+
+def generate_boxplot(project_name):
+    file_path = f"outputs/{project_name}/effect.log"
+    # 1) Read and parse the file, collecting point estimates by label
+    # file_path = 'prion_effect.log'  # <-- update to your actual path/filename
+    benign_scores = []
+    pathogenic_scores = []
+
+    pattern = re.compile(
+        r'treatment_[^\[]+\[(Benign|Pathogenic)\]: '
+        r'Causal Effect: (?P<score>-?\d+\.\d+)'
+    )
+
+    with open(file_path, 'r') as f:
+        for line in f:
+            m = pattern.search(line)
+            if not m:
+                continue
+            label = m.group(1)
+            score = float(m.group('score'))
+            if label == 'Benign':
+                benign_scores.append(score)
+            else:
+                pathogenic_scores.append(score)
+
+    # 2) Create side-by-side vertical boxplots
     plt.figure(figsize=(8, 6))
-    
-    for r, p, t in zip(recalls, precisions, thresholds):
-        plt.text(r, p + 0.015, f'{t:.2f}', fontsize=8, ha='center')
-
-    # Plot
-    plt.plot(recalls, precisions, marker='o')
-    plt.xlabel("Recall (TPR)")
-    plt.ylabel("Precision")
-    plt.title("Precision–Recall Curve")
-    plt.grid(True)
+    plt.boxplot([benign_scores, pathogenic_scores], labels=['Benign', 'Pathogenic'])
+    plt.ylabel('Causal Effect', fontsize=12)
+    plt.title('Distribution of Causal Effect Estimates', fontsize=14)
+    plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
-    plt.savefig(save_path)
-    print(f"Saved precision-recall curve to: {save_path}")
+
+    # 3) Save the figure (instead of plt.show())
+    plt.savefig(f"outputs/{project_name}/results/bp.png", format="png", dpi=300)
+    plt.savefig(f"outputs/{project_name}/results/bp.eps", format="eps", dpi=300)
+
+def generate_pr_curve(project_name):
+    # 1) Read and parse the file
+    # file_path = 'prionsequence_effect.log'  # <-- replace with your filename
+    
+    file_path = f"outputs/{project_name}/effect.log"
+    
+    labels = []
+    scores = []
+
+    # pattern captures “Benign” vs “Pathogenic” and the causal‐effect score
+    pattern = re.compile(
+        r'treatment_[^\[]+\[(?P<label>Benign|Pathogenic)\]: '
+        r'Causal Effect: -?\d+\.\d+ \('
+        r'(?P<low>-?\d+\.\d+),'
+    )
+
+    with open(file_path, 'r') as f:
+        for line in f:
+            m = pattern.search(line)
+            if not m:
+                continue
+            label = m.group('label')
+            score = float(m.group('low'))
+            # treat Pathogenic as the “positive” class
+            labels.append(1 if label == 'Pathogenic' else 0)
+            scores.append(score)
+
+    # 2) Compute precision and recall
+    precision, recall, _ = precision_recall_curve(labels, scores)
+    avg_prec = average_precision_score(labels, scores)
+
+    # 3) Plot
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall, precision, lw=2,
+            label=f'PR curve (AP = {avg_prec:.2f})')
+
+    plt.xlabel('Recall', fontsize=14)
+    plt.ylabel('Precision', fontsize=14)
+    plt.title('Precision–Recall Curve', fontsize=16)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.legend(loc='lower left')
+    plt.tight_layout()
+
+    plt.savefig(f"outputs/{project_name}/results/prc.png", format="png", dpi=300)
+    plt.savefig(f"outputs/{project_name}/results/prc.eps", format="eps", dpi=300)
+
+
+def generate_summary(project_name, threshold=0.0):
+
+    file_path = f"outputs/{project_name}/effect.log"
+
+    labels = []    # 1=Pathogenic, 0=Benign
+    lower_bound = []
+    upper_bound = []
+    point_est = []
+
+    pattern = re.compile(
+        r'treatment_[^\[]+\[(?P<label>Benign|Pathogenic)\]:\s*'      # label
+        r'Causal Effect:\s*'
+        r'(?P<point>-?\d+\.\d+)\s*'                                  # point estimate
+        r'\(\s*'
+        r'(?P<low>-?\d+\.\d+)\s*,\s*'                                # lower CI
+        r'(?P<high>-?\d+\.\d+)\s*'                                   # upper CI
+        r'\)'
+    )
+
+    with open(file_path) as f:
+        for line in f:
+            m = pattern.search(line)
+            if not m:
+                continue
+            labels.append(1 if m.group('label')=='Pathogenic' else 0)
+            lower_bound.append(float(m.group('low')))
+            point_est.append(float(m.group('point')))
+            upper_bound.append(float(m.group('high')))
+
+    # 3) Dataset summary
+    N = len(labels)
+    num_pos = sum(labels)
+    num_neg = N - num_pos
+
+
+    # 4) Confusion matrix at `threshold`
+    preds = [1 if s>=threshold else 0 for s in lower_bound]
+
+    TP = sum(1 for p,l in zip(preds,labels) if p==1 and l==1)
+    FP = sum(1 for p,l in zip(preds,labels) if p==1 and l==0)
+    FN = sum(1 for p,l in zip(preds,labels) if p==0 and l==1)
+    TN = sum(1 for p,l in zip(preds,labels) if p==0 and l==0)
+
+
+
+    # 5) Average rank of Pathogenic items
+    #    rank 1 = highest score, rank N = lowest score
+
+
+    combo = list(zip(point_est, labels))
+
+    scombo = sorted(combo, key=lambda x: x[0], reverse=True)
+    num_pos = sum(labels)
+
+    # print(scombo)
+    total_rank = 0
+    for i,ele in enumerate(scombo, 1):
+        if ele[1] == 1:
+            total_rank += i
+
+
+    avg_path_rank = total_rank / num_pos
+
+
+    random_avgs = []
+    for _ in range(10000):
+        total_rank = 0
+        
+        random.shuffle(labels)
+        for i,ele in enumerate(labels, 1):
+            if ele == 1:
+                total_rank += i
+        random_avgs.append(total_rank / num_pos)
+        
+    random_avgs = np.array(random_avgs)
+
+    ci_lower = np.percentile(random_avgs, 2.5)
+    ci_upper = np.percentile(random_avgs, 97.5)
+        
+        
+    with open(f"outputs/{project_name}/results/summary.txt", "w") as f:
+        print(f"Total mutations: {N}", file=f)
+        print(f"Pathogenic: {num_pos} ({num_pos/N*100:.1f}%)", file=f)
+        print(f"Benign:     {num_neg} ({num_neg/N*100:.1f}%)\n", file=f)
+        print("Confusion matrix @ threshold =", threshold, file=f)
+        print(f"  TP: {TP}", file=f)
+        print(f"  FP: {FP}", file=f)
+        print(f"  FN: {FN}", file=f)
+        print(f"  TN: {TN}\n", file=f)
+        print(f"Average rank of Pathogenic mutations: {avg_path_rank:.2f} (out of {N})", file=f)
+        print(f"Expected rank of Pathogenic mutations: {np.mean(random_avgs):.2f} ({ci_lower:.2f}, {ci_upper:.2f}) (out of {N})", file=f)

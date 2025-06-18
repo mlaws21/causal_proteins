@@ -19,13 +19,14 @@ from alphafold_driver.driver import fold_all
 from sequence_adjust.proteinbert import protein_bert_scores
 from sequence_adjust.blosum import blosum_scores
 from alignment_functions.alignment_functions import align_all, dual_weighted_rmsd_align
-from query.query2 import process_mutations
+from query.query import process_mutations
 from query.predict import process_files
-from query.results import calc_summary, generate_precision_recall_curve
+from query.results import ordering, generate_boxplot, generate_pr_curve, generate_summary
+# from query.display import display
+
 from datetime import datetime
 import argparse
 from cont_treatment.mono import generate_dr_curve
-from query.display import display
 
 PARTITION = 'b'
 GPUS = 19
@@ -118,7 +119,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
         # remember to normalize
         scores = []
         if sequence_score_method.lower() == "proteinbert":
-            proteinbert_pkl = f"pickles/{project_name}_proteinbert_scores.pkl"
+            proteinbert_pkl = f"outputs/{project_name}/pickles/proteinbert_scores.pkl"
             if os.path.exists(proteinbert_pkl):
                 log(f"Reading ProteinBERT scores from file {proteinbert_pkl}")
                 with open(proteinbert_pkl, "rb") as f:
@@ -131,7 +132,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
                     pickle.dump(scores, f)
                 log(f"{len(scores)} Scores Computed")
         elif sequence_score_method.lower() == "blosum":
-            blosum_pkl = f"pickles/{project_name}_blosum_scores.pkl"
+            blosum_pkl = f"outputs/{project_name}/pickles/blosum_scores.pkl"
             if os.path.exists(blosum_pkl):
                 log(f"Reading BLOSUM scores from file {blosum_pkl}")
                 with open(blosum_pkl, "rb") as f:
@@ -152,7 +153,7 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
         
         fold_all(patient_data["ID"], patient_data["Sequence"], PARTITION, protein_name, log, num_workers=GPUS)
         
-        align_pkl = f"pickles/{project_name}_alignments.pkl"
+        align_pkl = f"outputs/{project_name}/pickles/alignments.pkl"
         if os.path.exists(align_pkl):
             log(f"Reading alignments from file {align_pkl}")
             with open(align_pkl, "rb") as f:
@@ -233,13 +234,18 @@ def calculate_effect(project_name):
     
     log(datetime.now())
     treatment = "Align_Score"
+    log("Effect Calculation Complete")
     
     data = process_files(project_name, treatment, log)
     
-    generate_precision_recall_curve(data)
-    
-    display(project_name, log)
-    log("Effect Calculation Complete")
+    ordering(project_name, log)
+    log("Generating Boxplot")
+    generate_boxplot(project_name)
+    log("Generating Precision-Recall Curve")
+    generate_pr_curve(project_name)
+    log("Generating Summary")
+    generate_summary(project_name, threshold=0.0)
+    log("Result Generation Complete")
     
     
 def main():
@@ -257,8 +263,21 @@ def main():
     
     response = ""
     
+    # initialize all the necesary directories
     if not os.path.exists(f"outputs/{args.project}"):
         os.makedirs(f"outputs/{args.project}")
+        
+    if not os.path.exists(f"outputs/{args.project}/pickles"):
+        os.makedirs(f"outputs/{args.project}/pickles")
+        
+    if not os.path.exists(f"outputs/{args.project}/results"):
+        os.makedirs(f"outputs/{args.project}/results")
+        
+    if not os.path.exists(f"intervention_data/"):
+        os.makedirs(f"intervention_data/")
+        
+    if not os.path.exists(f"slurm/"):
+        os.makedirs(f"slurm/")
     
     while True:
         print(f"Welcome to Project [{args.project}]! Would you like to:")
@@ -275,7 +294,7 @@ def main():
             
         elif response == '2':
             print(f"Analyzing Data and Logging Output to [outputs/{args.project}/analysis.log]")
-            analyze_data(f"outputs/{args.project}/data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project, args.protein)
+            analyze_data(f"outputs/{args.project}/data.csv", f"outputs/{args.project}/pickles/spline.pkl", args.ref, args.project, args.protein)
             
         elif response == '3':
             print(f"Calculating Effects and Logging Output to [outputs/{args.project}/effect.log]")
@@ -288,15 +307,7 @@ def main():
         else:
             print("Invalid Request: please enter a number 1-5")
         
-    
-
-    print(response)
         
-
-    # generate_data(args.ref, args.input, args.metric, args.project, coeffs)
-    
-    
-    # analyze_data(f"{args.project}_data.csv", f"pickles/{args.project}_spline.pkl", args.ref, args.project)
     
 
 if __name__ == "__main__":

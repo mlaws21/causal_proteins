@@ -420,7 +420,7 @@ def make_strict_convex_underestimator(points, delta=0):
 
 def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, treatment="Align_Score", outcome="Disease"):
     
-    dr_pkl = f"pickles/{project_name}_spline.pkl"
+    dr_pkl = f"outputs/{project_name}/pickles/spline.pkl"
     
     # TODO FIXME
     if os.path.exists(dr_pkl):
@@ -454,9 +454,6 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     cubic_spline = build_cubic_spline(xlist, ylist)
     # exp_ys = [exp_deriv(F(i, patient_numerical_data, treatment=treatment), a, b) for i in np.arange(0, 10.5, 0.5)]
     # print(exp_ys)
-    
-    if not os.path.exists(f"outputs/{project_name}/results"):
-        os.makedirs(f"outputs/{project_name}/results")
     
     dr_graph_file = f"outputs/{project_name}/results/dr_curve.png"
     dr_eps_file =f"outputs/{project_name}/results/dr_curve.eps"
