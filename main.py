@@ -3,30 +3,30 @@
 # Todo this could be a chatbot lol
 # Another idea could be LLM aided generation of mutation parsing/extracting code
 
-# things we can do
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0 = all logs, 1 = filter INFO, 2 = filter INFO+WARNING, 3 = filter all but ERROR
 
 # generate data
 import pandas as pd
 import numpy as np
 import threading
-import os
+
+
 import pickle
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0 = all logs, 1 = filter INFO, 2 = filter INFO+WARNING, 3 = filter all but ERROR
-
-from typing import List, Dict, Optional, Tuple
-from data_generation.mutgen import generate_synth, split_and_unique
-from alphafold_driver.driver import fold_all
-from sequence_adjust.proteinbert import protein_bert_scores
-from sequence_adjust.blosum import blosum_scores
-from alignment_functions.alignment_functions import align_all, dual_weighted_rmsd_align
-from query.query import process_mutations
-from query.predict import process_files
-from query.results import ordering, generate_boxplot, generate_pr_curve, generate_summary
-# from query.display import display
-
-from datetime import datetime
 import argparse
-from cont_treatment.mono import generate_dr_curve
+from datetime import datetime
+from typing import List, Dict, Optional, Tuple
+
+from helper.generate_data import generate_synth, split_and_unique
+from helper.fold import fold_all
+from helper.proteinbert import protein_bert_scores
+from helper.blosum import blosum_scores
+from helper.dose_response import generate_dr_curve
+from alignment_functions.alignment_functions import align_all, dual_weighted_rmsd_align
+from helper.intervention import process_mutations
+from helper.calc_effect import process_files
+from helper.results import ordering, generate_boxplot, generate_pr_curve, generate_summary
+
 
 PARTITION = 'b'
 GPUS = 19

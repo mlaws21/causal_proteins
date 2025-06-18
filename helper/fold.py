@@ -67,13 +67,13 @@ def fold(name, seq, partition, log_fn):
     with open("/shared/25mdl4/af_input/" + my_filename, "w") as json_file:
         json.dump(inp_data, json_file, indent=2)
         
-    
+    # TODO FIXME
     if node_has_free_gpu("gpmoo-a1") < 4:
-        run_cmd = f"/shared/25mdl4/causal_proteins/shell/run-alpha-{'a'}.sh"
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
     elif node_has_free_gpu("gpmoo-b2") < 8:
-        run_cmd = f"/shared/25mdl4/causal_proteins/shell/run-alpha-{'b2'}.sh"
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b2'}.sh"
     else:
-        run_cmd = f"/shared/25mdl4/causal_proteins/shell/run-alpha-{'b1'}.sh"
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b1'}.sh"
         
     
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
