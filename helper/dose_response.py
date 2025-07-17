@@ -36,10 +36,12 @@ def mu(data, treatment, outcome, log_fn=print):
     log_fn(f"Mu Formula: {formula}")
     
     # print(formula)
-    model = smf.glm(formula=formula, data=data, family=sm.families.Binomial())
-    result = model.fit()
-    
-    return result
+    if set(data[outcome]) == {0, 1}:
+        model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
+    else:
+        model = smf.glm(formula=formula, family=sm.families.Gaussian(), data=data).fit()
+
+    return model
 
 def pi(data, treatment, outcome, log_fn=print):
     #pi(a|w)
@@ -250,9 +252,14 @@ def backdoor(a, data, treatment="T", outcome="Y"):
     confounders = [col for col in data.columns if col not in [outcome]]
     
     formula = f"{outcome} ~ 1 + {' + '.join(confounders)}"
-    
     print("backdoor formula", formula)
-    model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
+    
+    if set(data[outcome]) == {0, 1}:
+        model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
+    else:
+        model = smf.glm(formula=formula, family=sm.families.Gaussian(), data=data).fit()
+    
+    # model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
     data_a = data.copy()
     data_a[treatment] = a
     data_0 = data.copy()
@@ -334,7 +341,8 @@ def make_strict_convex_underestimator(points, delta=0):
 
     return f, df
 
-def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, treatment="Align_Score", outcome="Disease"):
+# coeffs is none if we are using existing data
+def generate_dr_curve(patient_numerical_data, project_name, coeffs=None, log_fn=print, treatment="Align_Score", outcome="Disease"):
     
     dr_pkl = f"outputs/{project_name}/pickles/spline.pkl"
     
@@ -374,7 +382,8 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs, log_fn, trea
     x_vals = np.arange(0, 10.5, 0.5)
     
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
-    plt.plot(x_vals, [compute_ground_truth(patient_numerical_data.copy(), i, treatment, outcome, coeffs) for i in x_vals], color='blue', label="Ground", marker='o')
+    if coeffs is not None:
+        plt.plot(x_vals, [compute_ground_truth(patient_numerical_data.copy(), i, treatment, outcome, coeffs) for i in x_vals], color='blue', label="Ground", marker='o')
     plt.plot(x_vals, [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in x_vals] , color='red', label="Estimate", marker='x')
     # plt.plot(x_vals, [mygcm_deriv(F(i, patient_numerical_data, treatment=treatment)) for i in x_vals], color='black', label="gcm", marker='+')
     # plt.plot(x_vals, [F(i, patient_numerical_data, treatment=treatment) for i in x_vals], color='green', label="Exp", marker='+')

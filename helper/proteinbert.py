@@ -4,6 +4,7 @@ from helper.protein_bert_helper.existing_model_loading import load_pretrained_mo
 from helper.protein_bert_helper.conv_and_global_attention_model import get_model_with_hidden_layers_as_outputs
 from scipy.spatial.distance import cosine
 
+
 # note it can be shorter -- so nonsense is ok?
 def protein_bert_scores(ref, seqs, seq_len=253):
 

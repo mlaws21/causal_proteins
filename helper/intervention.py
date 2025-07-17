@@ -15,6 +15,7 @@ import itertools
 # - dr_curve_func should be the dose response curve -- takes in values [0, inf)
 #   that represent align scores, then outputs number [0, 1] as p(cancer)
 
+
 def check_job(job_id):
     while True:
         try:
@@ -121,7 +122,7 @@ def fold(name, seq, partition, protein_name, log_fn):
         # job has finished
         # read the output and then do the comparison
         
-def compute_align(ref_id, seq_id, protein_name, alignment_function, log_fn):
+def compute_align(ref_id, seq_id, protein_name, alignment_function, alignment_args, log_fn):
     
     out_root = "/shared/25mdl4/af_output/"
     
@@ -135,9 +136,10 @@ def compute_align(ref_id, seq_id, protein_name, alignment_function, log_fn):
         
     cif_file1 = f'{folder1}/seed-2_sample-0/model.cif'
     cif_file2 = f'{folder2}/seed-2_sample-0/model.cif'
-    json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
-    json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
-    align_score = alignment_function(cif_file1, cif_file2, json_file1, json_file2)
+    # FIXME
+    # json_file1 = f'{folder1}/seed-2_sample-0/confidences.json'  # Replace with your first JSON file
+    # json_file2 = f'{folder2}/seed-2_sample-0/confidences.json'
+    align_score = alignment_function(cif_file1, cif_file2, *alignment_args)
     
     if align_score is None:
         log_fn(f"WARNING: nonsense mutation -- skipping")
@@ -146,7 +148,7 @@ def compute_align(ref_id, seq_id, protein_name, alignment_function, log_fn):
     return align_score
     
     
-def fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignment_function, log_fn):
+def fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignment_function, alignment_args, log_fn):
     # presumably either prev or post should already be folded so we can use 1 thread for this
     
     
@@ -157,8 +159,8 @@ def fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignmen
     assert wo_fold is not None
     
     ref_name = f"{protein_name}_ref"
-    with_align = compute_align(ref_name, with_fold, protein_name, alignment_function, log_fn)
-    wo_align = compute_align(ref_name, wo_fold, protein_name, alignment_function, log_fn)
+    with_align = compute_align(ref_name, with_fold, protein_name, alignment_function, alignment_args, log_fn)
+    wo_align = compute_align(ref_name, wo_fold, protein_name, alignment_function, alignment_args, log_fn)
     
     return with_align, wo_align
     
@@ -211,7 +213,7 @@ def match_mut_location(new_muts, germline):
                 break
     return matches
 
-def query(mut_data, data, ref_seq, num_individuals, partition, project_name, protein_name, alignment_function, log_fn):
+def query(mut_data, data, ref_seq, num_individuals, partition, project_name, protein_name, alignment_function, alignment_args, log_fn):
     # mut_data is mut_data.ID, mut_data.Ground
     mutation = mut_data.ID
     
@@ -261,7 +263,7 @@ def query(mut_data, data, ref_seq, num_individuals, partition, project_name, pro
         # print("------------------")
         
         # TODO: right now we are gonna hang here -- need to parallelize
-        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignment_function,log_fn)
+        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignment_function, alignment_args, log_fn)
         
         # in loop to see progress
         
@@ -287,7 +289,7 @@ def query(mut_data, data, ref_seq, num_individuals, partition, project_name, pro
 
          
         
-def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, alignment_function, log_fn, partition, num_workers=None):
+def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, alignment_function, alignment_args, log_fn, partition, num_workers=None):
     data = pd.read_csv(data_filename)
 
     all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
@@ -303,7 +305,7 @@ def process_mutations(data_filename, spline_filename, ref_seq, subset, project_n
         futures = []
         for mut in all_mutations.itertuples(index=False):
             # time.sleep(0.5)
-            futures.append(executor.submit(query, mut, data, ref_seq, subset, partition, project_name, protein_name, alignment_function, log_fn))
+            futures.append(executor.submit(query, mut, data, ref_seq, subset, partition, project_name, protein_name, alignment_function, alignment_args, log_fn))
         
         for future in as_completed(futures):
             try:

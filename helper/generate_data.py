@@ -1,4 +1,5 @@
 import random
+import pandas as pd
 
 # vars effecting disease (response):
 # - age (old/young) old much more likely to have cancer

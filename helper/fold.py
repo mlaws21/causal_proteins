@@ -9,10 +9,12 @@ import time
 import signal
 import os
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
+import traceback
 
 def check_job(job_id):
+    # print(f"Checking job {job_id}")
     while True:
         try:
             # Check if the job is in the queue
@@ -33,10 +35,19 @@ def check_job(job_id):
 
 # def cleanup():
 
+def choose_run_cmd():
+    # TODO FIXME
+    
+    # if node_has_free_gpu("gpmoo-a1") < 4:
+    #     run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
+    # elif node_has_free_gpu("gpmoo-b2") < 8:
+    #     run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b2'}.sh"
+    # else:
+    run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-b1.sh"
 
+    return run_cmd
 
-
-def fold(name, seq, partition, log_fn):
+def fold(name, seq, log_fn):
 
     if os.path.exists(f"/shared/25mdl4/af_output/{name}"):
         log_fn(f"SKIPPING: [{name}] has already been folded")
@@ -63,17 +74,10 @@ def fold(name, seq, partition, log_fn):
     }
 
     my_filename = f"{name}.json"
-    
-    with open("/shared/25mdl4/af_input/" + my_filename, "w") as json_file:
+    with open("/shared/25mdl4/af_input/" + my_filename, "w+") as json_file:
         json.dump(inp_data, json_file, indent=2)
-        
-    # TODO FIXME
-    if node_has_free_gpu("gpmoo-a1") < 4:
-        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
-    elif node_has_free_gpu("gpmoo-b2") < 8:
-        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b2'}.sh"
-    else:
-        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b1'}.sh"
+    
+    run_cmd = choose_run_cmd()
         
     
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
@@ -83,6 +87,8 @@ def fold(name, seq, partition, log_fn):
     # print("Return Code:", result.returncode)
     
     job_num = result.stdout.strip().split()[-1]
+    
+    # print(f"Job Number: {job_num}")
     
     
     if check_job(job_num):
@@ -106,21 +112,26 @@ def node_has_free_gpu(node):
         if line == node:
             used += 1
     return used
-def fold_all(ids, seqs, partition, protein_name, log_fn, num_workers=None):
+def fold_all(ids, seqs, protein_name, log_fn, num_workers=None):
     # Example function to be executed by threads
     
     log_fn("Beginning Fold Routine")
     
     if num_workers == None:
-        num_workers = 3 if partition == "a" else 7
-    log_fn(f"Using Partition {partition} with {num_workers} workers")
+        num_workers = 1
+    log_fn(f"Using {num_workers} workers")   
 # Create a ThreadPoolExecutor with 4 threads
+    started = set()
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = []
 
         for i, (row_id, row_seq) in enumerate(zip(ids, seqs)):
-
-            futures.append(executor.submit(fold, f"{protein_name}_{row_id}", row_seq, partition, log_fn))
+            if f"{protein_name}_{row_id}" not in started:
+                log_fn(f"SUBMITTING: [{protein_name}_{row_id}]")
+                futures.append(executor.submit(fold, f"{protein_name}_{row_id}", row_seq, log_fn))
+                started.add(f"{protein_name}_{row_id}")
+            else:
+                log_fn(f"SKIPPING: [{protein_name}_{row_id}] has already been submitted")
     
         for future in as_completed(futures):
             try:
@@ -129,17 +140,10 @@ def fold_all(ids, seqs, partition, protein_name, log_fn, num_workers=None):
             except Exception as e:
                 # Log the exception or print it as needed
                 print(f"Error occurred in thread: {e}")
+                print(traceback.format_exc())
 def main():
 
-    if len (sys.argv) < 2:
-        print("Usage python driver.py [a/b]")
-        exit(1)
-        
-    assert sys.argv[1] in ["a", "b", "b1"]
-    
-    
-    fold_all_from_datafile("data.json", sys.argv[1])
-    
+    fold("idh1_ref", "MSKKISGGSVVEMQGDEMTRIIWELIKEKLIFPYVELDLHSYDLGIENRDATNDQVTKDAAEAIKKHNVGVKCATITPDEKRVEEFKLKQMWKSPNGTIRNILGGTVFREAIICKNIPRLVSGWVKPIIIGRHAYGDQYRATDFVVPGPGKVEITYTPSDGTQKVTYLVHNFEEGGGVAMGMYNQDKSIEDFAHSSFQMALSKGWPLYLSTKNTILKKYDGRFKDIFQEIYDKQYKSQFEAQKIWYEHRLIDDMVAQAMKSEGGFIWACKNYDGDVQSDSVAQGYGSLGMMTSVLVCPDGKTVEAEAAHGTVTRHYRMYQKGQETSTNPIASIFAWTRGLAHRAKLDNNKELAFFANALEEVSIETIEAGFMTKDLAACIKGLPNVQRSDYLNTFEFMDKLGENLKIKLAQAKL", print)
     
 if __name__ == "__main__":
     main()
