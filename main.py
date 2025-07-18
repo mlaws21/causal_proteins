@@ -1,5 +1,6 @@
 NUM_ROWS = 1000
-NUM_SUBSET = 100
+NUM_SUBSET = None
+OUTCOME = "Grade"
 
 # controller -- just calls into all of my bs
 
@@ -31,8 +32,7 @@ from helper.calc_effect import process_files
 from helper.results import ordering, generate_boxplot, generate_pr_curve, generate_summary
 
 np.random.seed(42)
-PARTITION = 'b'
-GPUS = 5
+GPUS = 8
 log_lock = threading.Lock()
 
 
@@ -178,28 +178,28 @@ def generate_data(ref_sequence: str, mutated_sequences: str | Tuple[list[str], l
         
         patient_data["Align_Score"] = np_alignments
         
-        log("Calculating Disease Column")
+        log(f"Calculating {OUTCOME} Column")
         
         logit = coeffs["Intercept"] + sum([coeffs[x] * patient_data[x] for x in numerical_cols])
         
         # print(logit)
         prob_Y = 1 / (1 + np.exp(-logit))  # Sigmoid function
-        patient_data["Disease"] = np.random.binomial(1, prob_Y)
+        patient_data[OUTCOME] = np.random.binomial(1, prob_Y)
 
-        log(f"Mean of Probability of Disease: {np.mean(patient_data['Disease'])}")
+        log(f"Mean of Probability of OUTCOME: {np.mean(patient_data[OUTCOME])}")
         
         patient_data.to_csv(f'outputs/{project_name}/data.csv', index=False)
     
     # Now we generate the dose response curve
     
     # Take all columns from patient_data and drop any non-numerical ones
-    numerical_data = patient_data.select_dtypes(include=[np.number])
-    log(f"Numerical Columns: {numerical_data.columns}")
+    numerical_cols.append(OUTCOME)
+    numerical_data = patient_data[numerical_cols]
     
     
     treatment = "Align_Score"
-    outcome = "Disease"
-    generate_dr_curve(numerical_data, project_name, None, log, treatment, outcome)
+    # outcome = "Disease"
+    generate_dr_curve(numerical_data, project_name, coeffs, log, treatment, OUTCOME)
     
     log("Data Generation Complete")
     
@@ -318,24 +318,30 @@ def use_existing_data(ref_sequence, seqs_and_cov_data, sequence_score_method, pr
         patient_data["Align_Score"] = np_alignments
 
 
-        log(f"Mean of Probability of Disease: {np.mean(patient_data['Disease'])}")
+        log(f"Mean of Probability of OUTCOME: {np.mean(patient_data[OUTCOME])}")
         
-        patient_data.to_csv(f'outputs/{project_name}/data.csv', index=False)
+    
     
     # Now we generate the dose response curve
     
-    numerical_cols.append("Disease")
-
+    numerical_data = patient_data.select_dtypes(include=[np.number])
+    log(f"Numerical Columns: {numerical_data.columns}")
+    # outcome = "Disease"
+    # numerical_data = numerical_data.sample(frac=1, random_state=42).reset_index(drop=True)
+    # numerical_data = numerical_data.head(300)
+    if "Ground" not in patient_data.columns:
+        patient_data["Ground"] = 0
+    patient_data.to_csv(f'outputs/{project_name}/data.csv', index=False)
     
-    numerical_data = patient_data[numerical_cols]
+    
     treatment = "Align_Score"
-    outcome = "Disease"
-    generate_dr_curve(numerical_data, project_name, coeffs, log, treatment, outcome)
+    
+    generate_dr_curve(numerical_data, project_name, None, log, treatment, OUTCOME)
     
     log("Data Generation Complete")
 
 # FIXME CHANGE BACK TO 100
-def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, subset=NUM_SUBSET):
+def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name, chosen_mutations=None, subset=NUM_SUBSET):
     
     with open(f"outputs/{project_name}/analysis.log", "w"):
         pass
@@ -356,7 +362,7 @@ def analyze_data(data_csv, spline_pkl, ref_sequence, project_name, protein_name,
     # pandq finder, confidence weighted, reweight
     # FIXME
     alignment_args = ()
-    process_mutations(data_csv, spline_pkl, ref_sequence, subset, project_name, protein_name, tm_align_wrapper, alignment_args, log, PARTITION, num_workers=GPUS)
+    process_mutations(data_csv, spline_pkl, ref_sequence, subset, project_name, protein_name, tm_align_wrapper, alignment_args, log, chosen_mutations, num_workers=GPUS)
     log("Analysis Complete")
     
 def calculate_effect(project_name):
@@ -439,8 +445,13 @@ def main():
                 use_existing_data(args.ref, args.input, args.metric, args.project, args.protein)
                     
             elif response == '2':
+                chosen_mutations = input("Enter chosen mutations (comma-separated), or press Enter to use all: ").strip()
+                if not chosen_mutations:
+                    chosen_mutations = None
+                else:
+                    chosen_mutations = [m.lower().strip() for m in chosen_mutations.split(",")]
                 print(f"Analyzing Data and Logging Output to [outputs/{args.project}/analysis.log]")
-                analyze_data(f"outputs/{args.project}/data.csv", f"outputs/{args.project}/pickles/spline.pkl", args.ref, args.project, args.protein)
+                analyze_data(f"outputs/{args.project}/data.csv", f"outputs/{args.project}/pickles/spline.pkl", args.ref, args.project, args.protein, chosen_mutations)
                 
             elif response == '3':
                 print(f"Calculating Effects and Logging Output to [outputs/{args.project}/effect.log]")

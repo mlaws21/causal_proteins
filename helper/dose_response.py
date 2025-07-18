@@ -37,8 +37,10 @@ def mu(data, treatment, outcome, log_fn=print):
     
     # print(formula)
     if set(data[outcome]) == {0, 1}:
+        log_fn(f"Fitting Binomial Model")
         model = smf.glm(formula=formula, family=sm.families.Binomial(), data=data).fit()
     else:
+        log_fn(f"Fitting Gaussian Model")
         model = smf.glm(formula=formula, family=sm.families.Gaussian(), data=data).fit()
 
     return model
@@ -52,9 +54,8 @@ def pi(data, treatment, outcome, log_fn=print):
     log_fn(f"Pi Formula: {formula}")
 
     # gaussian bc continuous
-    model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian())
-    result = model.fit()
-    return result 
+    model = smf.glm(formula=formula, data=data, family=sm.families.Gaussian()).fit()
+    return model 
 
 def gamma(a, data, ij_data, mu_est, pi_est, fa_est, treatment, outcome):
 
@@ -66,12 +67,16 @@ def gamma(a, data, ij_data, mu_est, pi_est, fa_est, treatment, outcome):
     
     Y = data[outcome]
     
+    # get p(a|w) instead of E[A|W]
+    pi_std = np.std(data[treatment] - pi_pred)
+    prob_pi = norm.pdf(data[treatment], loc=pi_pred, scale=pi_std)
+    
     # get marginal distribution fn(a)
-    std = np.std(data[treatment] - fa_pred)
-    prob_a = norm.pdf(data[treatment], loc=fa_pred, scale=std)
+    fa_std = np.std(data[treatment] - fa_pred)
+    prob_a = norm.pdf(data[treatment], loc=fa_pred, scale=fa_std)
     
     ind = data[treatment] <= a
-    front = np.mean(ind * (Y- mu_pred)/(pi_pred/prob_a))
+    front = np.mean(ind * (Y- mu_pred)/(prob_pi/prob_a))
     
     # back part (double sum)
     indij = ij_data[treatment] <= a
@@ -89,17 +94,6 @@ def F(a, data, treatment):
     n = len(series)
     edf = np.sum(series <= a) / n
     return edf
-
-def theta(a, gcm_x, gcm_y, data, treatment="T"):
-    Fa = F(a, data, treatment=treatment)
-    
-    # print(a)
-    # print(Fa)
-    ind = np.where(gcm_x == Fa)[0][0]
-    
-    slope_left = (gcm_y[ind] - gcm_y[ind - 1]) / (gcm_x[ind] - gcm_x[ind - 1])
-    return slope_left
-    # print(Fa)
     
 def get_points(data, treatment, outcome, log_fn=print):
     # gets points for GCM in sorted order
@@ -355,7 +349,7 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs=None, log_fn=
             xlist, ylist = pickle.load(f)
             
     else:
-        # patient_numerical_data = patient_numerical_data.head(100)
+        # patient_numerical_data = patient_numerical_data.head(300)
         log_fn(f"Generating Dose Response Curve for {len(patient_numerical_data)} patients")
         
         xlist, ylist = get_points(patient_numerical_data, treatment, outcome, log_fn)   
@@ -378,19 +372,21 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs=None, log_fn=
     
     dr_graph_file = f"outputs/{project_name}/results/dr_curve.png"
     dr_eps_file =f"outputs/{project_name}/results/dr_curve.eps"
+    x_vals = np.arange(0, max(patient_numerical_data[treatment]) + 0.1*max(patient_numerical_data[treatment]), max(patient_numerical_data[treatment]) / 20)
+
     
-    x_vals = np.arange(0, 10.5, 0.5)
+    # x_vals = np.arange(0, 10.5, 0.5)
     
     # TODO: cubic spline not fully convex... its like basically there but a little noisy
     if coeffs is not None:
         plt.plot(x_vals, [compute_ground_truth(patient_numerical_data.copy(), i, treatment, outcome, coeffs) for i in x_vals], color='blue', label="Ground", marker='o')
-    plt.plot(x_vals, [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in x_vals] , color='red', label="Estimate", marker='x')
-    # plt.plot(x_vals, [mygcm_deriv(F(i, patient_numerical_data, treatment=treatment)) for i in x_vals], color='black', label="gcm", marker='+')
+    # plt.plot(x_vals, [cubic_spline(F(i, patient_numerical_data, treatment=treatment), 1) for i in x_vals] , color='red', label="Estimate", marker='x')
+    plt.plot(x_vals, [mygcm_deriv(F(i, patient_numerical_data, treatment=treatment)) for i in x_vals], color='black', label="gcm", marker='+')
     # plt.plot(x_vals, [F(i, patient_numerical_data, treatment=treatment) for i in x_vals], color='green', label="Exp", marker='+')
     # plt.plot(np.arange(0, 15.5, 0.5), [backdoor(i, data, treatment=treatment, outcome=outcome) for i in np.arange(0, 15.5, 0.5)], color='green', label="Backdoor", marker='+')
     
     plt.xlabel("Misalignment Score (Å)")
-    plt.ylabel("Probability of Disease")
+    plt.ylabel("Probability of Outcome")
     plt.title("Dose Response Curve")
         
     plt.grid(True)
@@ -407,6 +403,7 @@ def generate_dr_curve(patient_numerical_data, project_name, coeffs=None, log_fn=
     gcm_graph_file = f"outputs/{project_name}/results/gcm.png"
     
     plt.plot(np.arange(0, 1.0001, 0.001), [cubic_spline(x) for x in np.arange(0, 1.00001, 0.001)], color='green', label='Spline')
+    plt.plot(np.arange(0, 1.0001, 0.001), [mygcm(x) for x in np.arange(0, 1.00001, 0.001)], color='black', label='GCM')
     plt.scatter(xlist, ylist, color='blue', label='Points')
     
 

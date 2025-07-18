@@ -333,20 +333,6 @@ def rmsd_align(protein1, protein2, json1, json2, PandQfinder, confidence_weighte
 # currently looks only at CA plddts
 # need to play with reweighting
 # should try tm_score but idk how reweighting works
-# def tm_align_wrapper(cif1, cif2):
-    
-#     coords1, seq1, confs1 = get_ca_coords_and_plddt_from_cif(cif1)
-#     coords2, seq2, confs2 = get_ca_coords_and_plddt_from_cif(cif2)
-
-#     res = tm_align(coords1, coords2, seq1, seq2)
-
-
-#     coords1_aligned_to_2 = apply_alignment(coords1, res.u, res.t)
-    
-#     score = weighted_rmsd(coords1_aligned_to_2, coords2, (confs1 + confs2) / 2)
-
-#     return score
-
 def tm_align_wrapper(cif1, cif2):
     
     coords1, seq1, confs1 = get_ca_coords_and_plddt_from_cif(cif1)
@@ -354,13 +340,29 @@ def tm_align_wrapper(cif1, cif2):
 
     res = tm_align(coords1, coords2, seq1, seq2)
 
-    score = 1 - (res.tm_norm_chain1 + res.tm_norm_chain2) / 2    
+
+    coords1_aligned_to_2 = apply_alignment(coords1, res.u, res.t)
     
-    # coords1_aligned_to_2 = apply_alignment(coords1, res.u, res.t)
-    
-    # score = weighted_rmsd(coords1_aligned_to_2, coords2, (confs1 + confs2) / 2)
+    score = weighted_rmsd(coords1_aligned_to_2, coords2, (confs1 + confs2) / 2)
 
     return score
+
+
+# this wrapper sucks 
+# def tm_align_wrapper(cif1, cif2):
+    
+#     coords1, seq1, confs1 = get_ca_coords_and_plddt_from_cif(cif1)
+#     coords2, seq2, confs2 = get_ca_coords_and_plddt_from_cif(cif2)
+
+#     res = tm_align(coords1, coords2, seq1, seq2)
+
+#     score = 1 - (res.tm_norm_chain1 + res.tm_norm_chain2) / 2    
+    
+#     # coords1_aligned_to_2 = apply_alignment(coords1, res.u, res.t)
+    
+#     # score = weighted_rmsd(coords1_aligned_to_2, coords2, (confs1 + confs2) / 2)
+
+#     return score
     
     
 

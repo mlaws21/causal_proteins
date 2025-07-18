@@ -38,12 +38,12 @@ def check_job(job_id):
 def choose_run_cmd():
     # TODO FIXME
     
-    # if node_has_free_gpu("gpmoo-a1") < 4:
-    #     run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
-    # elif node_has_free_gpu("gpmoo-b2") < 8:
-    #     run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b2'}.sh"
-    # else:
-    run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-b1.sh"
+    if node_has_free_gpu("gpmoo-a1") < 4:
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
+    elif node_has_free_gpu("gpmoo-b1") < 7:
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b1'}.sh"
+    else:
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-b2.sh"
 
     return run_cmd
 

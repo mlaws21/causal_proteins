@@ -192,8 +192,10 @@ def generate_summary(project_name, threshold=0.0):
         if ele[1] == 1:
             total_rank += i
 
-
-    avg_path_rank = total_rank / num_pos
+    if num_pos == 0:
+        avg_path_rank = 0.0
+    else:
+        avg_path_rank = total_rank / num_pos
 
 
     random_avgs = []
@@ -204,7 +206,10 @@ def generate_summary(project_name, threshold=0.0):
         for i,ele in enumerate(labels, 1):
             if ele == 1:
                 total_rank += i
-        random_avgs.append(total_rank / num_pos)
+        if num_pos == 0:
+            random_avgs.append(0.0)
+        else:
+            random_avgs.append(total_rank / num_pos)
         
     random_avgs = np.array(random_avgs)
 

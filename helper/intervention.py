@@ -8,7 +8,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import itertools
-
+import traceback
 
 # - mutation should be in XNY form 
 # - data needs to include sequences, mutations
@@ -46,8 +46,18 @@ def node_has_free_gpu(node):
         if line == node:
             used += 1
     return used
-        
-def fold(name, seq, partition, protein_name, log_fn):
+      
+def get_run_cmd():
+    if node_has_free_gpu("gpmoo-a1") < 4:
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
+    elif node_has_free_gpu("gpmoo-b1") < 7:
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b1'}.sh"
+    else:
+        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b2'}.sh"
+    
+    return run_cmd
+
+def fold(name, seq, protein_name, log_fn):
 
     if name == f"{protein_name}_":
         name = f"{protein_name}_ref"
@@ -87,14 +97,8 @@ def fold(name, seq, partition, protein_name, log_fn):
     with open("/shared/25mdl4/af_input/" + my_filename, "w") as json_file:
         json.dump(inp_data, json_file, indent=2)
         
-    
-    if node_has_free_gpu("gpmoo-a1") < 4:
-        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'a'}.sh"
-    elif node_has_free_gpu("gpmoo-b2") < 8:
-        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b2'}.sh"
-    else:
-        run_cmd = f"/shared/25mdl4/causal_proteins/helper/shell/run-alpha-{'b1'}.sh"
-    
+    run_cmd = get_run_cmd()
+
     result = subprocess.run(["sbatch", run_cmd, my_filename], capture_output=True, text=True)
 
     
@@ -148,12 +152,12 @@ def compute_align(ref_id, seq_id, protein_name, alignment_function, alignment_ar
     return align_score
     
     
-def fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignment_function, alignment_args, log_fn):
+def fold_with_wo_and_score(with_data, wo_data, protein_name, alignment_function, alignment_args, log_fn):
     # presumably either prev or post should already be folded so we can use 1 thread for this
     
     
-    with_fold = fold(f"{protein_name}_{with_data[0]}", with_data[1], partition, protein_name, log_fn)
-    wo_fold = fold(f"{protein_name}_{wo_data[0]}", wo_data[1], partition, protein_name, log_fn)
+    with_fold = fold(f"{protein_name}_{with_data[0]}", with_data[1], protein_name, log_fn)
+    wo_fold = fold(f"{protein_name}_{wo_data[0]}", wo_data[1], protein_name, log_fn)
     
     assert with_fold is not None
     assert wo_fold is not None
@@ -213,11 +217,12 @@ def match_mut_location(new_muts, germline):
                 break
     return matches
 
-def query(mut_data, data, ref_seq, num_individuals, partition, project_name, protein_name, alignment_function, alignment_args, log_fn):
+def query(mut_data, data, ref_seq, num_individuals, project_name, protein_name, alignment_function, alignment_args, log_fn):
     # mut_data is mut_data.ID, mut_data.Ground
     mutation = mut_data.ID
     
-
+    if num_individuals is None:
+        num_individuals = len(data)
     # we take a random sample to make shit faster
     if num_individuals > len(data):
         print(f"Not Enough data for sample size {num_individuals}")
@@ -263,19 +268,25 @@ def query(mut_data, data, ref_seq, num_individuals, partition, project_name, pro
         # print("------------------")
         
         # TODO: right now we are gonna hang here -- need to parallelize
-        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, protein_name, partition, alignment_function, alignment_args, log_fn)
+        with_align, wo_align = fold_with_wo_and_score(with_data, wo_data, protein_name, alignment_function, alignment_args, log_fn)
         
         # in loop to see progress
         
+        # new_row = {
+        #     "Age": row["Age"],
+        #     "Race": row["Race"],
+        #     "Lifestyle": row["Lifestyle"],
+        #     "Sequence_Score": row["Sequence_Score"],
+        #     "Align_Score_do_mut": with_align,
+        #     "Align_Score_do_no_mut": wo_align,
+        #     "Ground": row["Ground"],
+        
+        # }
+        # Just pull the existing covariates from the row, and add the new align scores
         new_row = {
-            "Age": row["Age"],
-            "Race": row["Race"],
-            "Lifestyle": row["Lifestyle"],
-            "Sequence_Score": row["Sequence_Score"],
             "Align_Score_do_mut": with_align,
             "Align_Score_do_no_mut": wo_align,
             "Ground": row["Ground"],
-        
         }
         
         post_treatment.append(new_row)
@@ -289,23 +300,26 @@ def query(mut_data, data, ref_seq, num_individuals, partition, project_name, pro
 
          
         
-def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, alignment_function, alignment_args, log_fn, partition, num_workers=None):
+def process_mutations(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, alignment_function, alignment_args, log_fn, chosen_mutations=None, num_workers=None):
     data = pd.read_csv(data_filename)
 
-    all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
+    if chosen_mutations is None:
+        all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
+    else:
+        # Only process the specific IDs provided in chosen_mutations
+        all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
+        all_mutations = all_mutations[all_mutations['ID'].isin(chosen_mutations)]
     
+    log_fn(f"Processing: {all_mutations}")
     # print(sum(all_mutations['Ground']))
     if num_workers is None:
-        num_workers = 3 if partition == "a" else 8
+        num_workers = 1
     
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        # for mut in all_mutations.itertuples(index=False):
-        #     executor.submit(thread, mut, partition)
-        # # print(mut)
         futures = []
         for mut in all_mutations.itertuples(index=False):
             # time.sleep(0.5)
-            futures.append(executor.submit(query, mut, data, ref_seq, subset, partition, project_name, protein_name, alignment_function, alignment_args, log_fn))
+            futures.append(executor.submit(query, mut, data, ref_seq, subset, project_name, protein_name, alignment_function, alignment_args, log_fn))
         
         for future in as_completed(futures):
             try:
@@ -314,9 +328,11 @@ def process_mutations(data_filename, spline_filename, ref_seq, subset, project_n
             except Exception as e:
                 # Log the exception or print it as needed
                 print(f"Error occurred in thread: {e}")
+                print(traceback.format_exc())
+                
 
 
-def process_mutations_serial(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, alignment_function, log_fn, partition, num_workers=None):
+def process_mutations_serial(data_filename, spline_filename, ref_seq, subset, project_name, protein_name, alignment_function, log_fn, num_workers=None):
     data = pd.read_csv(data_filename)
 
     all_mutations = data[['ID', 'Ground']].drop_duplicates(subset=['ID'])
@@ -324,7 +340,7 @@ def process_mutations_serial(data_filename, spline_filename, ref_seq, subset, pr
 
     for mut in all_mutations.itertuples(index=False):
         # time.sleep(0.5)
-        query(mut, data, ref_seq, subset, partition, project_name, protein_name, alignment_function, log_fn)
+        query(mut, data, ref_seq, subset, project_name, protein_name, alignment_function, log_fn)
     
 
 
